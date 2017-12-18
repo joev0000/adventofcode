@@ -2,6 +2,11 @@ const assert = require('assert');
 
 const number = /^-?[0-9]+$/;
 
+const queue = [[],[]];
+
+let waiter = undefined;
+
+let singleProcess = false;
 function value(registers, val) {
   return number.test(val) ? Number(val) : registers[val];
 }
@@ -9,7 +14,8 @@ function value(registers, val) {
 
 function snd(val) {
   return function(registers) {
-    registers['__snd__'] = value(registers, val);
+    const other = singleProcess? 0: (registers.p?0:1);
+    queue[other].push(value(registers, val));
     return 1;
   }
 }
@@ -42,12 +48,22 @@ function mod(reg, val) {
   }
 }
 
-function rcv(val) {
+function rcv(reg) {
   return function(registers) {
-    if(value(registers, val) != 0 && registers['__rcv__']) {
-      return registers['__rcv__'](registers['__snd__']);
+    if(singleProcess) {
+      queue[0].shift();
+      return 1;
     }
-    return 1;
+    else if(queue[registers.p].length > 0) {
+      registers[reg] = queue[registers.p].shift();
+      return 1;
+    }
+    else if(waiter == undefined) {
+      return Number.MAX_SAFE_INTEGER;
+    }
+    else {
+      return Number.MAX_SAFE_INTEGER - 1;  // deadlock
+    }
   }
 }
 
@@ -73,17 +89,18 @@ function compile(registers, instr) {
 }
 
 function firstNonZeroRcv(input) {
-  let result = undefined;
-  const registers = {
-    '__rcv__': v => { result = v; return 10000000; }
-  }
+  singleProcess = true;
+  const registers = { p: 0 };
   const prg = input.split('\n').map(e => e.trim());
   const compiled = prg.map(e => compile(registers, e));
   let pc = 0;
   while(pc >= 0 && pc < prg.length) {
+    const q0 = queue[0][0];
     pc += compiled[pc](registers);
+    if(q0 != undefined && queue[0][0] == undefined) {
+      return q0;
+    }
   }
-  return result;
 }
 
 const testInput = 
