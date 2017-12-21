@@ -20,6 +20,33 @@ function particleToString(p) {
   return p?`p=<${p.p.x},${p.p.y},${p.p.z}>, v=<${p.v.x},${p.v.y},${p.v.z}>, a=<${p.a.x},${p.a.y},${p.a.z}>`:undefined;
 }
 
+function tick(particles) {
+  function update(p) {
+    p.v.x += p.a.x;
+    p.v.y += p.a.y;
+    p.v.z += p.a.z;
+
+    p.p.x += p.v.x;
+    p.p.y += p.v.y;
+    p.p.z += p.v.z;
+
+    return p;
+  }
+
+  function removeCollisions(particles) {
+    const locations = particles.map(p => `<${p.p.x},${p.p.y},${p.p.z}>`).reduce((a,p,i) => { a[p] ? a[p].push(i) : a[p] = [i]; return a;}, {});
+
+    Object.keys(locations).forEach(k => {
+      if(locations[k].length > 1) {
+        locations[k].forEach(i => particles[i] = undefined);
+      }
+    });
+
+    return particles.filter(p => p);
+  }
+
+  return removeCollisions(particles.map(update));
+}
 const testData = `
 p=<3,0,0>, v=<2,0,0>, a=<-1,0,0>
 p=<4,0,0>, v=<0,0,0>, a=<-2,0,0>
@@ -32,4 +59,12 @@ process.stdin.on('data', chunk => data += chunk);
 process.stdin.on('end', () => {
   let particles = parse(data);
   console.log(lowestAcceleration(particles));
+
+  // This is unsatisfactory.  Should end when we prove no further
+  // collisions are possible.
+  for(let i = 0; i < 1000; i++) {
+    particles = tick(particles);
+  }
+
+  console.log(particles.length);
 });
