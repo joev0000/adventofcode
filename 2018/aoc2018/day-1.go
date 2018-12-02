@@ -2,84 +2,85 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"regexp"
+	"strconv"
 )
 
-func Map(vs []string, f func(string) int) []int {
-	vsm := make([]int, len(vs))
-	for i, v := range vs {
-		vsm[i] = f(v)
+func day1() Puzzle {
+	parseToIntSlice := func(s string) []int {
+		re := regexp.MustCompile(`[+-]\d+`)
+		ss := re.FindAllString(s, -1)
+
+		is := make([]int, len(ss))
+		for i, s := range ss {
+			parsed, err := strconv.ParseInt(s, 10, 32)
+			if err != nil {
+				log.Fatal(err)
+			}
+			is[i] = int(parsed)
+		}
+		return is
 	}
-	return vsm
-}
 
-func parseToIntSlice(s string) []int {
-	re := regexp.MustCompile(`[+-]\d+`)
-	ss := re.FindAllString(s, -1)
-	is := Map(ss, func(s string) int {
-		var i int
-		fmt.Sscanf(s, "%d", &i)
-		return i
-	})
-
-	return is
-}
-
-/* Samples:
-"+1\n-2\n+3\n+1" -> 3
-"+1\n+1\n+1" -> 3
-"+1\n+1\n-2" -> 0
-"-1\n-2\n-3" -> -6
-*/
-func day1part1(in string) string {
-	var acc int
-	is := parseToIntSlice(in)
-
-	for i := 0; i < len(is); i++ {
-		acc += is[i]
+	samples1 := map[string]string{
+		"+1\n-2\n+3\n+1\n": "3",
+		"+1\n+1\n+1\n":     "3",
+		"+1\n+1\n-2\n":     "0",
+		"-1\n-2\n-3\n":     "-6",
 	}
-	return fmt.Sprint(acc)
-}
-
-/*
-  Samples:
-  "+1\n-1\n" -> 0
-  "+3\n+3\n+4\n-2\n-4\n" -> 10
-  "-6\n,+3\n,+8\n,+5\n+-6\n" -> 5
-  "+7\n+7\n-2\n-7\n-4\n" -> 14
-*/
-func day1part2(in string) string {
-	var acc int
-	m := make(map[int]bool)
-	m[0] = true
-	is := parseToIntSlice(in)
-
-	i := 0
-	for {
-		if i == len(is) {
-			i = 0
+	part1 := func(in io.Reader) string {
+		var acc int
+		bytes, err := ioutil.ReadAll(in)
+		if err != nil {
+			log.Fatal(err)
 		}
 
-		acc += is[i]
-		_, prs := m[acc]
-		if prs {
-			break
-		} else {
-			m[acc] = true
+		is := parseToIntSlice(string(bytes[:]))
+
+		for i := 0; i < len(is); i++ {
+			acc += is[i]
+		}
+		return fmt.Sprint(acc)
+	}
+
+	samples2 := map[string]string{
+		"+1\n-1\n":                 "0",
+		"+3\n+3\n+4\n-2\n-4\n":     "10",
+		"-6\n,+3\n,+8\n,+5\n+-6\n": "5",
+		"+7\n+7\n-2\n-7\n-4\n":     "14",
+	}
+	part2 := func(in io.Reader) string {
+		var acc int
+		bytes, err := ioutil.ReadAll(in)
+		if err != nil {
+			log.Fatal(err)
 		}
 
-		i++
-	}
-	return fmt.Sprint(acc)
-}
+		m := make(map[int]bool)
+		m[0] = true
+		is := parseToIntSlice(string(bytes[:]))
 
-func readFile(filename string) string {
-	content, err := ioutil.ReadFile(filename)
-	if err != nil {
-		log.Fatal(err)
+		i := 0
+		for {
+			if i == len(is) {
+				i = 0
+			}
+
+			acc += is[i]
+			_, prs := m[acc]
+			if prs {
+				break
+			} else {
+				m[acc] = true
+			}
+
+			i++
+		}
+		return fmt.Sprint(acc)
 	}
 
-	return string(content[:])
+	return Puzzle{"data/day1.txt", [2]Part{Part{samples1, part1}, Part{samples2, part2}}}
 }

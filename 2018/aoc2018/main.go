@@ -1,10 +1,47 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"io"
+	"log"
+	"os"
+	"strings"
+)
+
+type Part struct {
+	samples map[string]string
+	solve   func(in io.Reader) string
+}
+
+type Puzzle struct {
+	input string
+	parts [2]Part
+}
 
 func main() {
 	fmt.Println("Advent of Code 2018: Go Edition")
 
-	fmt.Println("Day 1, part 1: ", day1part1(readFile("data/day1.txt")))
-	fmt.Println("Day 1, part 2: ", day1part2(readFile("data/day1.txt")))
+	var puzzles []Puzzle
+
+	puzzles = append(puzzles, day1())
+
+	for day, puzzle := range puzzles {
+		for partNum, part := range puzzle.parts {
+
+			for sample, expected := range part.samples {
+				actual := part.solve(strings.NewReader(sample))
+				if actual != expected {
+					log.Fatalf("Sample %#v failed: expected %#v but got %#v", sample, expected, actual)
+				}
+			}
+			in, err := os.Open(puzzle.input)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			fmt.Printf("Day %d, part %d: %s\n", day+1, partNum+1, part.solve(in))
+
+			in.Close() // defer?
+		}
+	}
 }
