@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -43,7 +42,7 @@ func day1() Puzzle {
 		for i := 0; i < len(is); i++ {
 			acc += is[i]
 		}
-		return fmt.Sprint(acc)
+		return strconv.FormatInt(int64(acc), 10)
 	}
 
 	samples2 := map[string]string{
@@ -59,8 +58,8 @@ func day1() Puzzle {
 			log.Fatal(err)
 		}
 
-		m := make(map[int]bool)
-		m[0] = true
+		m := make(map[int]struct{})
+		m[0] = struct{}{}
 		is := parseToIntSlice(string(bytes[:]))
 
 		i := 0
@@ -70,16 +69,15 @@ func day1() Puzzle {
 			}
 
 			acc += is[i]
-			_, prs := m[acc]
-			if prs {
+			if _, done := m[acc]; done {
 				break
 			} else {
-				m[acc] = true
+				m[acc] = struct{}{}
 			}
 
 			i++
 		}
-		return fmt.Sprint(acc)
+		return strconv.FormatInt(int64(acc), 10)
 	}
 
 	return Puzzle{"data/day1.txt", [2]Part{Part{samples1, part1}, Part{samples2, part2}}}
