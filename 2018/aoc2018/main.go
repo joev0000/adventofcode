@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"log"
@@ -25,6 +26,7 @@ func main() {
 
 	puzzles = append(puzzles, day1())
 	puzzles = append(puzzles, day2())
+	puzzles = append(puzzles, day3())
 
 	for day, puzzle := range puzzles {
 		for partNum, part := range puzzle.parts {
@@ -45,4 +47,16 @@ func main() {
 			in.Close() // defer?
 		}
 	}
+}
+
+func lines(r io.Reader) []string {
+	out := make([]string, 0)
+	bufin := bufio.NewReader(r)
+	line, err := bufin.ReadString('\n')
+	for err == nil {
+		line = line[:len(line)-1]
+		out = append(out, line)
+		line, err = bufin.ReadString('\n')
+	}
+	return out
 }

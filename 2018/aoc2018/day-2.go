@@ -1,23 +1,11 @@
 package main
 
 import (
-	"bufio"
 	"io"
 	"strconv"
 )
 
 func day2() Puzzle {
-	lines := func(in io.Reader) []string {
-		out := make([]string, 0)
-		bufin := bufio.NewReader(in)
-		line, err := bufin.ReadString('\n')
-		for err == nil {
-			line = line[:len(line)-1]
-			out = append(out, line)
-			line, err = bufin.ReadString('\n')
-		}
-		return out
-	}
 	countLetters := func(s string) map[rune]int {
 		out := make(map[rune]int)
 		for _, b := range s {
