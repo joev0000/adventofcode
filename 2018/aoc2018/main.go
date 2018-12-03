@@ -24,6 +24,7 @@ func main() {
 	var puzzles []Puzzle
 
 	puzzles = append(puzzles, day1())
+	puzzles = append(puzzles, day2())
 
 	for day, puzzle := range puzzles {
 		for partNum, part := range puzzle.parts {
