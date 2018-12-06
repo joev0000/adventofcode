@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"strings"
+  "time"
 )
 
 type Part struct {
@@ -28,6 +29,7 @@ func main() {
 	puzzles = append(puzzles, day2())
 	puzzles = append(puzzles, day3())
 	puzzles = append(puzzles, day4())
+	puzzles = append(puzzles, day5())
 
 	for day, puzzle := range puzzles {
 		for partNum, part := range puzzle.parts {
@@ -43,7 +45,11 @@ func main() {
 				log.Fatal(err)
 			}
 
-			fmt.Printf("Day %d, part %d: %s\n", day+1, partNum+1, part.solve(in))
+      start := time.Now()
+      answer := part.solve(in)
+      nanos := time.Since(start).Nanoseconds()
+
+			fmt.Printf("Day %d, part %d: %s (%dms)\n", day+1, partNum+1, answer, nanos/1000000)
 
 			in.Close() // defer?
 		}
