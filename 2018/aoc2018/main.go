@@ -7,7 +7,7 @@ import (
 	"log"
 	"os"
 	"strings"
-  "time"
+	"time"
 )
 
 type Part struct {
@@ -45,9 +45,9 @@ func main() {
 				log.Fatal(err)
 			}
 
-      start := time.Now()
-      answer := part.solve(in)
-      nanos := time.Since(start).Nanoseconds()
+			start := time.Now()
+			answer := part.solve(in)
+			nanos := time.Since(start).Nanoseconds()
 
 			fmt.Printf("Day %d, part %d: %s (%dms)\n", day+1, partNum+1, answer, nanos/1000000)
 
