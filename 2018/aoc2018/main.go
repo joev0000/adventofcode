@@ -30,6 +30,7 @@ func main() {
 	puzzles = append(puzzles, day3())
 	puzzles = append(puzzles, day4())
 	puzzles = append(puzzles, day5())
+	puzzles = append(puzzles, day6())
 
 	for day, puzzle := range puzzles {
 		for partNum, part := range puzzle.parts {
