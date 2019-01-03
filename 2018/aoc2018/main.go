@@ -23,16 +23,10 @@ type Puzzle struct {
 func main() {
 	fmt.Println("Advent of Code 2018: Go Edition")
 
-	var puzzles []Puzzle
+	puzzles := [](func() Puzzle){day1, day2, day3, day4, day5, day6}
 
-	puzzles = append(puzzles, day1())
-	puzzles = append(puzzles, day2())
-	puzzles = append(puzzles, day3())
-	puzzles = append(puzzles, day4())
-	puzzles = append(puzzles, day5())
-	puzzles = append(puzzles, day6())
-
-	for day, puzzle := range puzzles {
+	for day, p := range puzzles {
+		puzzle := p()
 		for partNum, part := range puzzle.parts {
 
 			for sample, expected := range part.samples {
