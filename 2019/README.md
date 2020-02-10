@@ -4,12 +4,12 @@ some Advent of Code 2019 problems using the tools available in 1970.  The
 solutions can be run on a typical PDP-11 of the time:
 
 * CPU
-** PDP-11/20, so no FP11, EIS, or CIS instructions
+  * PDP-11/20, so no FP11, EIS, or CIS instructions
 * Memory
-** 28 kilowords (56 kilobytes). No expenses spared here.
+  * 28 kilowords (56 kilobytes). No expenses spared here.
 * Peripherals
-** PC11 Paper Tape Reader/Punch (or PR11 Reader)
-** KL11 Teletype Control (for the LT33 Model 33 ASR Teletype)
+  * PC11 Paper Tape Reader/Punch (or PR11 Reader)
+  * KL11 Teletype Control (for the LT33 Model 33 ASR Teletype)
 
 Solutions can be loaded into the PDP-11 using the Absolute Loader, and
 run directly on the metal, without an operating system monitor.  Input
@@ -34,15 +34,15 @@ load a more complex program called the Aboslute Loader.  The Absolute Loader
 is a program that can load user programs into memory.  The typical sequence
 of actions is
 
-# Turn on the PDP-11.
-# Deposit the bootstrap program via the toggle switches.
-# Place the Absolute Loader tape in the high-speed tape reader.
-# Toggle the run switch to load in Aboslute Loader
-# Place the program you want to load into the tape reader.
-# Toggle the continue switch to load in the program
-# Deposit the start address of the program
-# Toggle the continue switch to run the program.
-# Watch the blinking lights.
+1. Turn on the PDP-11.
+1. Deposit the bootstrap program via the toggle switches.
+1. Place the Absolute Loader tape in the high-speed tape reader.
+1. Toggle the run switch to load in Aboslute Loader
+1. Place the program you want to load into the tape reader.
+1. Toggle the continue switch to load in the program
+1. Deposit the start address of the program
+1. Toggle the continue switch to run the program.
+1. Watch the blinking lights.
 
 You can see how this worked on a real PDP-11 (the PDP-11/10, a "low cost"
 version of the PDP-11/20) in this [campy video](https://youtu.be/XV-7J5y1TQc?t=216).
