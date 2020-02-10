@@ -1,0 +1,130 @@
+; ADVENT OF CODE 2019: DAY 1
+; THE TYRANNY OF THE ROCKET EQUATION
+;
+; THIS PROGRAM CAN BE ASSEMBLED BY PAL-11A AND CAN BE RUN ON ANY
+; PDP-11 SYSTEM WITH A HIGH-SPEED PAPER TAPE READER.
+;
+; INPUT:  PAPER TAPE
+; OUTPUT: TTY
+;
+; START ADDRESS: 1000
+;
+
+;
+; SET UP REGISTER AND DEVICE LABELS
+;
+        R0=     %0              ; REGISTER 0
+        R1=     %1              ; REGISTER 1
+        R2=     %2              ; REGISTER 2
+        R3=     %3              ; REGISTER 3
+        R4=     %4              ; REGISTER 4
+        R5=     %5              ; REGISTER 5
+        SP=     %6              ; STACK POINTER
+        PC=     %7              ; PROGRAM COUNTER
+        TPS=    177564          ; TELEPRINTER STATUS WORD
+        TPB=    177566          ; TELEPRINTER BUFFER
+
+;
+; START OF PROGRAM
+;
+        .=      1000            ; ASSEMBLE AT ADDRESS 1000
+START:  MOV     #.,SP           ; SET UP STACK
+
+        MOV     #3661,-(SP)     ; PUSH 1969D
+        MOV     #3,-(SP)        ; PUSH 3D
+        JSR     PC,DIVU16
+        MOV     +(SP),R0        ; POP QUOTIENT
+        MOV     +(SP),R1        ; POP REMAINDER
+        SUB     #2,R0           ; SUBTRACT 2
+
+        MOV     #MSG,R0
+        JSR     PC,TTYOUT
+
+        HALT                    ; PROGRAM COMPLETE
+        BR      START           ; RESTART ON CONTINUE
+
+MSG:    .ASCII  /ADVENT OF CODE 2019 DAY 1/
+        .BYTE   15,12,0         ; CR,LF
+        .EVEN
+
+;
+; LIBRARY CODE
+;
+; TODO: THIS CAN MOVE TO ITS OWN MODULE WHEN WE START TO USE PAL-11S
+;       FOR NOW, IT IS COPIED INTO EACH PROGRAM
+;
+
+;
+; TTYOUT(R0: POINTER TO STRING BUFFER)
+;
+; WRITE NULL-TERMINATED STRING TO TELEPRINTER
+; USING PROGRAMMED I/O
+;
+TTYOUT: TSTB    @R0             ; ARE WE POINTING AT A ZERO BYTE?
+        BNE     TTY1            ; IF NOT, MOVE ON
+        RTS     PC              ; IF SO, RETURN TO CALLER
+TTY1:   TSTB    TPS             ; IS THE TTY READY?
+        BPL     TTY1            ; IF NOT, TRY AGAIN
+        MOVB    (R0)+,TPB       ; IF SO, WRITE AND MOVE TO NEXT BYTE
+        BR      TTYOUT          ; CONTINUE
+
+;
+; DIVU16(DIVIDEND, DIVISOR) -> (QUOTIENT, REMAINDER)
+;
+; UNSIGNED 16-BIT DIVISION
+;
+DIVU16: MOV     R0,-(SP)        ; SAVE R0
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     10(SP),R0       ; R0 <- DIVIDEND
+        MOV     6(SP),R1        ; R1 <- DIVISOR
+
+        BNE     L1              ; IS DIVISOR ZERO?
+        MOV     +(SP),R1        ; RESTORE R1
+        MOV     +(SP),R0        ; RESTORE R0
+        SEV                     ; INDICATE AN ERROR
+        RTS     PC              ; RETURN TO CALLER
+
+L1:     MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     R4,-(SP)        ; SAVE R4
+        CLR     R2              ; R2 <- ACCUMULATOR
+        CLR     R3              ; R3 <- RESULT
+        MOV     #20,R4          ; R4 <- COUNTER
+
+        TST     R0              ; SET N IF MSB SET
+L2:     BMI     L3              ; IF N IS SET, MOVE ON
+        DEC     R4              ; DECREMENT COUNTER
+        ASL     R0              ; SHIFT DIVIDEND LEFT
+        BR      L2              ; LOOP
+
+L3:
+        CMP     R2,R1           ; SET N IF ACCUM LESS THAN DIVISOR
+        BPL     L4              ; IF N SET, GO TO L4
+        ASL     R0              ; SHIFT DIVIDEND LEFT
+        ROL     R2              ; ROTATE ACCUM LEFT
+        ASL     R3              ; SHIFT RESULT LEFT
+        DEC     R4              ; DECREMENT COUNTER
+        BR      L5
+L4:
+        SUB     R1,R2           ; ACCUM <- ACCUM - DIVISOR
+        BIS     #1,R3           ; SET RESULT LSB
+L5:
+        TST     R4              ; IS COUNTER ZERO?
+        BNE     L3              ; IF NOT, CONTINUE
+
+        CMP     R2,R1           ; SET N IF ACCUM LESS THAN DIVISOR
+        BMI     L6              ; IF SO, MOVE ON
+        SUB     R1,R2           ; ACCUM <- ACCUM - DIVISOR
+        BIS     #1,R3           ; SET RESULT LSB
+L6:
+        MOV     R2,16(SP)       ; WIP: ZERO REMAINDER
+        MOV     R3,14(SP)       ; WIP: ZERO QUOTIENT
+        MOV     +(SP),R4        ; RESTORE R4
+        MOV     +(SP),R3        ; RESTORE R3
+        MOV     +(SP),R2        ; RESTORE R2
+        MOV     +(SP),R1        ; RESTORE R1
+        MOV     +(SP),R0        ; RESTORE R0
+        CLV                     ; NO ERROR
+        RTS     PC              ; RETURN TO CALLER
+
+        .END
