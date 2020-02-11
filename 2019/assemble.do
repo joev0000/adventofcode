@@ -3,29 +3,23 @@ ECHO Boot & Run PAL-11
 ECHO =================
 
 ECHO ...Set the CPU parameters
-SET CPU 11/05
-SET CPU 64K
+SET CPU 11/20
+SET CPU 56K
 
 ECHO ...disable undesired devices
-SET HK DISABLE
-; SET RHA DISABLE
-; joev SET PTP DISABLE
 SET DZ DISABLE
+SET RK DISABLE
 SET RL DISABLE
+SET HK DISABLE
 SET RX DISABLE
 SET RP DISABLE
 SET RQ DISABLE
 SET TM DISABLE
 SET TQ DISABLE
-SET RK DISABLE
 
-; joev
+ECHO ...enable paper tape punch and line printer
 SET PTP ENABLE
 SET LPT ENABLE
-
-ECHO ...attach ABSOLUTE LOADER papertape
-SET PTR ENABLE
-ATTACH PTR DEC-11-L2PC-PO.ptap
 
 ECHO ...Load Paper Tape bootstrap loader @ 28kW
 DEPOSIT 157744 016701
@@ -44,19 +38,23 @@ DEPOSIT 157774 000765
 DEPOSIT 157776 177550
 DEPOSIT SR 157744
 
+ECHO ...attach ABSOLUTE LOADER papertape
+SET PTR ENABLE
+ATTACH PTR DEC-11-L2PC-PO.ptap
+
 ECHO ...Execute bootstrap to load Absolute Loader
 GO 157744
 
 ECHO ...Attach PAL-11A (8K) papertape
 ATTACH PTR DEC-11-ASXA-PB.ptap
 
-; joev
-EXPECT "*S " ATTACH PTR input.pal11a; ATTACH PTP -n output.lda.ptap; SEND AFTER=10000,"H\r\n"; CONT
-EXPECT "*B " SEND AFTER=10000,"H\r\n"; CONT
-EXPECT "*L " SEND AFTER=10000,"T\r\n"; CONT
-EXPECT "*T " SEND AFTER=10000,"T\r\n"; CONT
-EXPECT " END ?" ATTACH PTR input.pal11a; SEND AFTER=10000,"\r\n"; CONT
-EXPECT " END ?" ATTACH PTR input.pal11a; SEND AFTER=10000,"\r\n"; CONT
+; Set up responses to PAL-11A initialization
+EXPECT "*S " ATTACH PTR %1.pal11a; SEND AFTER=20000,"H\r\n"; CONT
+EXPECT "*B " SEND AFTER=20000,"H/E\r\n"; CONT
+EXPECT "*L " SEND AFTER=20000,"H\r\n"; CONT
+EXPECT "*T " SEND AFTER=20000,"H/3\r\n"; CONT
+EXPECT " END ?" ATTACH PTR %1.pal11a; ATTACH PTP -n %1.lda.ptap; SEND AFTER=20000,"\r\n"; CONT
+EXPECT " END ?" ATTACH PTR %1.pal11a; ATTACH PTP -n %1.out; SEND AFTER=20000,"\r\n"; CONT
 EXPECT "*S " EXIT
 
 ECHO ...Use absolute loader to load and launch the content of the papertape

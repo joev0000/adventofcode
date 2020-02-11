@@ -1,24 +1,21 @@
 ECHO ...Set the CPU parameters
 SET CPU 11/20
-SET CPU 64K
+SET CPU 56K
 
 ECHO ...disable undesired devices
-SET HK DISABLE
-SET RHA DISABLE
-; joev SET PTP DISABLE
-SET PTP ENABLE
 SET DZ DISABLE
+SET RK DISABLE
 SET RL DISABLE
+SET HK DISABLE
 SET RX DISABLE
 SET RP DISABLE
 SET RQ DISABLE
 SET TM DISABLE
 SET TQ DISABLE
-SET RK DISABLE
 
-ECHO ...attach ABSOLUTE LOADER papertape
-SET PTR ENABLE
-ATTACH PTR DEC-11-L2PC-PO.ptap
+ECHO ...enable paper tape punch and line printer
+SET PTP ENABLE
+SET LPT ENABLE
 
 ECHO ...Load Paper Tape bootstrap loader @ 28kW
 DEPOSIT 157744 016701
@@ -37,11 +34,15 @@ DEPOSIT 157774 000765
 DEPOSIT 157776 177550
 DEPOSIT SR 157744
 
+ECHO ...attach ABSOLUTE LOADER papertape
+SET PTR ENABLE
+ATTACH PTR DEC-11-L2PC-PO.ptap
+
 ECHO ...Execute bootstrap to load Absolute Loader
 GO 157744
 
 ECHO ...Attach program papertape
-ATTACH PTR output.lda.ptap
+ATTACH PTR %1
 
 ECHO ...Use absolute loader to load and launch the content of the papertape
 DEPOSIT SR 0
@@ -50,4 +51,5 @@ DEPOSIT SR 0
 GO 157500
 
 ECHO ...Running program
+ECHO ------------------------------------------------------------
 GO 1000
