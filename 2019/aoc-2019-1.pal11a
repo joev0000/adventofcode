@@ -37,8 +37,8 @@ START:  MOV     #.,SP           ; SET UP STACK
         MOV     +(SP),R1        ; POP REMAINDER
         SUB     #2,R0           ; SUBTRACT 2
 
-        MOV     #MSG,R0
-        JSR     PC,TTYOUT
+        MOV     #MSG,-(SP)
+        JSR     PC,PUTS
 
         HALT                    ; PROGRAM COMPLETE
         BR      START           ; RESTART ON CONTINUE
@@ -54,19 +54,24 @@ MSG:    .ASCII  /ADVENT OF CODE 2019 DAY 1/
 ;       FOR NOW, IT IS COPIED INTO EACH PROGRAM
 ;
 
+
 ;
-; TTYOUT(R0: POINTER TO STRING BUFFER)
+; PUTS(BUFFER)
 ;
 ; WRITE NULL-TERMINATED STRING TO TELEPRINTER
 ; USING PROGRAMMED I/O
 ;
-TTYOUT: TSTB    @R0             ; ARE WE POINTING AT A ZERO BYTE?
-        BNE     TTY1            ; IF NOT, MOVE ON
-        RTS     PC              ; IF SO, RETURN TO CALLER
-TTY1:   TSTB    TPS             ; IS THE TTY READY?
-        BPL     TTY1            ; IF NOT, TRY AGAIN
-        MOVB    (R0)+,TPB       ; IF SO, WRITE AND MOVE TO NEXT BYTE
-        BR      TTYOUT          ; CONTINUE
+PUTS:   MOV     R0,-(SP)        ; SAVE R0
+        MOV     4(SP),R0        ; R0 <- BUFFER
+P0:     TSTB    @R0             ; IS THE BYTE ZERO?
+        BEQ     P2              ; YES, DONE
+P1:     TSTB    TPS             ; IS THE TTY READY?
+        BPL     P1              ; IF NOT, TRY AGAIN
+        MOVB    (R0)+,TPB       ; WRITE BYTE TO TTY, INC PTR
+        BR      P0              ; CONTINUE
+P2:     MOV     +(SP),R0        ; RESTORE P0
+        MOV     +(SP),+(SP)
+        RTS     PC              ; RETURN TO CALLER
 
 ;
 ; DIVU16(DIVIDEND, DIVISOR) -> (QUOTIENT, REMAINDER)
