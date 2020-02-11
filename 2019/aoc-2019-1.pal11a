@@ -30,8 +30,8 @@
         .=      1000            ; ASSEMBLE AT ADDRESS 1000
 START:  MOV     #.,SP           ; SET UP STACK
 
-        MOV     #3661,-(SP)     ; PUSH 1969D
         MOV     #3,-(SP)        ; PUSH 3D
+        MOV     #3661,-(SP)     ; PUSH 1969D
         JSR     PC,DIVU16
         MOV     +(SP),R0        ; POP QUOTIENT
         MOV     +(SP),R1        ; POP REMAINDER
@@ -75,8 +75,8 @@ TTY1:   TSTB    TPS             ; IS THE TTY READY?
 ;
 DIVU16: MOV     R0,-(SP)        ; SAVE R0
         MOV     R1,-(SP)        ; SAVE R1
-        MOV     10(SP),R0       ; R0 <- DIVIDEND
-        MOV     6(SP),R1        ; R1 <- DIVISOR
+        MOV     6(SP),R0        ; R0 <- DIVIDEND
+        MOV     10(SP),R1       ; R1 <- DIVISOR
 
         BNE     L1              ; IS DIVISOR ZERO?
         MOV     +(SP),R1        ; RESTORE R1
@@ -117,8 +117,8 @@ L5:
         SUB     R1,R2           ; ACCUM <- ACCUM - DIVISOR
         BIS     #1,R3           ; SET RESULT LSB
 L6:
-        MOV     R2,16(SP)       ; WIP: ZERO REMAINDER
-        MOV     R3,14(SP)       ; WIP: ZERO QUOTIENT
+        MOV     R2,16(SP)       ; REMAINDER OVERWRITES DIVISOR
+        MOV     R3,14(SP)       ; QUOTIENT OVERWRITES DIVIDEND
         MOV     +(SP),R4        ; RESTORE R4
         MOV     +(SP),R3        ; RESTORE R3
         MOV     +(SP),R2        ; RESTORE R2
