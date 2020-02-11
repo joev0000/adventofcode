@@ -32,13 +32,13 @@ START:  MOV     #.,SP           ; SET UP STACK
 
         MOV     #3,-(SP)        ; PUSH 3D
         MOV     #3661,-(SP)     ; PUSH 1969D
-        JSR     PC,DIVU16
-        MOV     +(SP),R0        ; POP QUOTIENT
-        MOV     +(SP),R1        ; POP REMAINDER
+        JSR     PC,DIVU16       ; DIVU16(3661, 3)
+        ADD     #4,SP           ; CLEAN UP STACK
         SUB     #2,R0           ; SUBTRACT 2
 
-        MOV     #MSG,-(SP)
-        JSR     PC,PUTS
+        MOV     #MSG,-(SP)      ; PUSH BUFFER POINTER
+        JSR     PC,PUTS         ; PUTS(BUFFER)
+        TST     (SP)+           ; CLEAN UP STACK
 
         HALT                    ; PROGRAM COMPLETE
         BR      START           ; RESTART ON CONTINUE
@@ -70,22 +70,17 @@ P1:     TSTB    TPS             ; IS THE TTY READY?
         MOVB    (R0)+,TPB       ; WRITE BYTE TO TTY, INC PTR
         BR      P0              ; CONTINUE
 P2:     MOV     +(SP),R0        ; RESTORE P0
-        MOV     +(SP),+(SP)
         RTS     PC              ; RETURN TO CALLER
 
 ;
-; DIVU16(DIVIDEND, DIVISOR) -> (QUOTIENT, REMAINDER)
+; DIVU16(DIVIDEND, DIVISOR) -> R0: QUOTIENT, R1: REMAINDER
 ;
 ; UNSIGNED 16-BIT DIVISION
 ;
-DIVU16: MOV     R0,-(SP)        ; SAVE R0
-        MOV     R1,-(SP)        ; SAVE R1
-        MOV     6(SP),R0        ; R0 <- DIVIDEND
-        MOV     10(SP),R1       ; R1 <- DIVISOR
+DIVU16: MOV     2(SP),R0        ; R0 <- DIVIDEND
+        MOV     4(SP),R1        ; R1 <- DIVISOR
 
         BNE     L1              ; IS DIVISOR ZERO?
-        MOV     +(SP),R1        ; RESTORE R1
-        MOV     +(SP),R0        ; RESTORE R0
         SEV                     ; INDICATE AN ERROR
         RTS     PC              ; RETURN TO CALLER
 
@@ -122,13 +117,11 @@ L5:
         SUB     R1,R2           ; ACCUM <- ACCUM - DIVISOR
         BIS     #1,R3           ; SET RESULT LSB
 L6:
-        MOV     R2,16(SP)       ; REMAINDER OVERWRITES DIVISOR
-        MOV     R3,14(SP)       ; QUOTIENT OVERWRITES DIVIDEND
+        MOV     R2,R1           ; REMAINDER OVERWRITES DIVISOR
+        MOV     R3,R0           ; QUOTIENT OVERWRITES DIVIDEND
         MOV     +(SP),R4        ; RESTORE R4
         MOV     +(SP),R3        ; RESTORE R3
         MOV     +(SP),R2        ; RESTORE R2
-        MOV     +(SP),R1        ; RESTORE R1
-        MOV     +(SP),R0        ; RESTORE R0
         CLV                     ; NO ERROR
         RTS     PC              ; RETURN TO CALLER
 
