@@ -61,16 +61,14 @@ MSG:    .ASCII  /ADVENT OF CODE 2019 DAY 1/
 ; WRITE NULL-TERMINATED STRING TO TELEPRINTER
 ; USING PROGRAMMED I/O
 ;
-PUTS:   MOV     R0,-(SP)        ; SAVE R0
-        MOV     4(SP),R0        ; R0 <- BUFFER
+PUTS:   MOV     2(SP),R0        ; R0 <- BUFFER
 P0:     TSTB    @R0             ; IS THE BYTE ZERO?
         BEQ     P2              ; YES, DONE
 P1:     TSTB    TPS             ; IS THE TTY READY?
         BPL     P1              ; IF NOT, TRY AGAIN
         MOVB    (R0)+,TPB       ; WRITE BYTE TO TTY, INC PTR
         BR      P0              ; CONTINUE
-P2:     MOV     +(SP),R0        ; RESTORE P0
-        RTS     PC              ; RETURN TO CALLER
+P2:     RTS     PC              ; RETURN TO CALLER
 
 ;
 ; DIVU16(DIVIDEND, DIVISOR) -> R0: QUOTIENT, R1: REMAINDER
