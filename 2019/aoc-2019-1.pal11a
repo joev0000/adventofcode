@@ -30,22 +30,38 @@
         .=      1000            ; ASSEMBLE AT ADDRESS 1000
 START:  MOV     #.,SP           ; SET UP STACK
 
+        MOV     #MSG,-(SP)      ; PUSH MESSAGE POINTER
+        JSR     PC,PUTS         ; PUTS(MESSAGE)
+        TST     (SP)+           ; CLEAN UP STACK
+
         MOV     #3,-(SP)        ; PUSH 3D
         MOV     #3661,-(SP)     ; PUSH 1969D
         JSR     PC,DIVU16       ; DIVU16(3661, 3)
         ADD     #4,SP           ; CLEAN UP STACK
         SUB     #2,R0           ; SUBTRACT 2
 
-        MOV     #MSG,-(SP)      ; PUSH BUFFER POINTER
+        MOV     #BUF1,-(SP)     ; PUSH BUFFER
+        MOV     R0,-(SP)        ; PUSH VALUE
+        JSR     PC,FU1610       ; FU1610(VALUE, BUFFER)
+        ADD     #4,SP           ; CLEAN UP STACK
+
+        MOV     #BUF1,-(SP)     ; PUSH BUFFER POINTER
         JSR     PC,PUTS         ; PUTS(BUFFER)
+        TST     (SP)+           ; CLEAN UP STACK
+
+        MOV     #CRLF,-(SP)     ; PUSH CRLF POINTER
+        JSR     PC,PUTS         ; PUTS(CRLF)
         TST     (SP)+           ; CLEAN UP STACK
 
         HALT                    ; PROGRAM COMPLETE
         BR      START           ; RESTART ON CONTINUE
 
 MSG:    .ASCII  /ADVENT OF CODE 2019 DAY 1/
-        .BYTE   15,12,0         ; CR,LF
+CRLF:   .BYTE   15,12,0         ; CR,LF
         .EVEN
+
+BUF1:   .WORD 0
+         .=.+16
 
 ;
 ; LIBRARY CODE
@@ -71,16 +87,51 @@ P1:     TSTB    TPS             ; IS THE TTY READY?
 P2:     RTS     PC              ; RETURN TO CALLER
 
 ;
+; FU1610(VALUE, BUFFER)
+;
+; FORAMT AN UNSIGNED WORD TO DECIMAL, PLACING THE RESULT IN BUFFER
+;
+FU1610:  MOV    R2,-(SP)        ; SAVE R2
+         MOV    R3,-(SP)        ; SAVE R3
+         MOV    R4,-(SP)        ; SAVE R4
+         MOV    10(SP),R0       ; R0 <- VALUE
+         MOV    12(SP),R3       ; R3 <- BUFFER
+         CLR    R4              ; R4 <- COUNTER (0)
+
+F1:      MOV    #12,-(SP)       ; PUSH DIVISOR (10D)
+         MOV    R0,-(SP)        ; PUSH DIVIDEND (VALUE)
+         JSR    PC,DIVU16       ; DIVU16(VALUE, 10D)
+         ADD    #4,SP           ; CLEAN UP STACK
+         ADD    #60,R1          ; CONVERT REMAINDER TO CHAR
+         MOVB   R1,-(SP)        ; PUSH DIGIT TO STACK
+         INC    R4              ; INCREMENT THE COUNTER
+         TST    R0              ; CHECK THE QUOTIENT
+         BNE    F1              ; IF NOT ZERO, MOVE TO NEXT DIGIT
+
+F2:      MOVB  (SP)+,(R3)+      ; MOVE DIGIT TO BUFFER
+         DEC   R4               ; DECREMENT THE COUNTER
+         BNE   F2               ; MOVE TO NEXT DIGIT
+
+         MOV    10(SP),R0       ; RETURN ORIGINAL VALUE
+         MOV    (SP)+,R4        ; RESTORE R4
+         MOV    (SP)+,R3        ; RESTORE R3
+         MOV    (SP)+,R2        ; RESTORE R2
+         RTS    PC              ; RETURN TO CALLER
+;
 ; DIVU16(DIVIDEND, DIVISOR) -> R0: QUOTIENT, R1: REMAINDER
 ;
 ; UNSIGNED 16-BIT DIVISION
 ;
-DIVU16: MOV     2(SP),R0        ; R0 <- DIVIDEND
-        MOV     4(SP),R1        ; R1 <- DIVISOR
-
-        BNE     L1              ; IS DIVISOR ZERO?
+DIVU16: MOV     4(SP),R1        ; R1 <- DIVISOR
+        BNE     L0              ; IS DIVISOR ZERO?
         SEV                     ; INDICATE AN ERROR
         RTS     PC              ; RETURN TO CALLER
+
+L0:     MOV     2(SP),R0        ; R0 <- DIVIDEND
+        BNE     L1              ; IS DIVIDEND ZERO?
+        CLR     R1              ; SET REMAINDER TO ZERO
+        CLV                     ; INDICATE NO ERROR
+        RTS     PC
 
 L1:     MOV     R2,-(SP)        ; SAVE R2
         MOV     R3,-(SP)        ; SAVE R3
