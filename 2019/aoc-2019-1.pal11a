@@ -40,14 +40,10 @@ START:  MOV     #.,SP           ; SET UP STACK
         ADD     #4,SP           ; CLEAN UP STACK
         SUB     #2,R0           ; SUBTRACT 2
 
-        MOV     #BUF1,-(SP)     ; PUSH BUFFER
+        MOV     #PUTC,-(SP)     ; PUSH PUTC SUBROUTINE
         MOV     R0,-(SP)        ; PUSH VALUE
-        JSR     PC,FU1610       ; FU1610(VALUE, BUFFER)
+        JSR     PC,FU1610       ; FU1610(VALUE, PUTC)
         ADD     #4,SP           ; CLEAN UP STACK
-
-        MOV     #BUF1,-(SP)     ; PUSH BUFFER POINTER
-        JSR     PC,PUTS         ; PUTS(BUFFER)
-        TST     (SP)+           ; CLEAN UP STACK
 
         MOV     #CRLF,-(SP)     ; PUSH CRLF POINTER
         JSR     PC,PUTS         ; PUTS(CRLF)
@@ -58,10 +54,6 @@ START:  MOV     #.,SP           ; SET UP STACK
 
 MSG:    .ASCII  /ADVENT OF CODE 2019 DAY 1/
 CRLF:   .BYTE   15,12,0         ; CR,LF
-        .EVEN
-
-BUF1:   .WORD 0
-         .=.+16
 
 ;
 ; LIBRARY CODE
@@ -69,6 +61,18 @@ BUF1:   .WORD 0
 ; TODO: THIS CAN MOVE TO ITS OWN MODULE WHEN WE START TO USE PAL-11S
 ;       FOR NOW, IT IS COPIED INTO EACH PROGRAM
 ;
+
+        .EVEN
+;
+; PUTC(CHAR)
+;
+; WRITE A CHARACTER TO TELEPRINTER USING PROGRAMMED I/O
+;
+PUTC:   MOV     2(SP),R0        ; R0 <- CHAR
+PC1:    TSTB    TPS             ; IS THE TTY READY?
+        BPL     PC1             ; IF NOT, TRY AGAIN
+        MOVB    R0,TPB          ; WRITE BYTE TO TTY, INC PTR
+        RTS     PC              ; RETURN TO CALLER
 
 
 ;
@@ -78,24 +82,25 @@ BUF1:   .WORD 0
 ; USING PROGRAMMED I/O
 ;
 PUTS:   MOV     2(SP),R0        ; R0 <- BUFFER
-P0:     TSTB    @R0             ; IS THE BYTE ZERO?
-        BEQ     P2              ; YES, DONE
-P1:     TSTB    TPS             ; IS THE TTY READY?
-        BPL     P1              ; IF NOT, TRY AGAIN
+PS0:    TSTB    @R0             ; IS THE BYTE ZERO?
+        BEQ     PS2             ; YES, DONE
+PS1:    TSTB    TPS             ; IS THE TTY READY?
+        BPL     PS1             ; IF NOT, TRY AGAIN
         MOVB    (R0)+,TPB       ; WRITE BYTE TO TTY, INC PTR
-        BR      P0              ; CONTINUE
-P2:     RTS     PC              ; RETURN TO CALLER
+        BR      PS0             ; CONTINUE
+PS2:    RTS     PC              ; RETURN TO CALLER
 
 ;
-; FU1610(VALUE, BUFFER)
+; FU1610(VALUE, OUT)
 ;
-; FORAMT AN UNSIGNED WORD TO DECIMAL, PLACING THE RESULT IN BUFFER
+; FORAMT AN UNSIGNED WORD TO DECIMAL, CALLING THE OUT SUBROUTINE
+; FOR EACH DIGIT.
 ;
 FU1610:  MOV    R2,-(SP)        ; SAVE R2
          MOV    R3,-(SP)        ; SAVE R3
          MOV    R4,-(SP)        ; SAVE R4
          MOV    10(SP),R0       ; R0 <- VALUE
-         MOV    12(SP),R3       ; R3 <- BUFFER
+         MOV    12(SP),R3       ; R3 <- OUT SUBROUTINE
          CLR    R4              ; R4 <- COUNTER (0)
 
 F1:      MOV    #12,-(SP)       ; PUSH DIVISOR (10D)
@@ -108,9 +113,10 @@ F1:      MOV    #12,-(SP)       ; PUSH DIVISOR (10D)
          TST    R0              ; CHECK THE QUOTIENT
          BNE    F1              ; IF NOT ZERO, MOVE TO NEXT DIGIT
 
-F2:      MOVB  (SP)+,(R3)+      ; MOVE DIGIT TO BUFFER
-         DEC   R4               ; DECREMENT THE COUNTER
-         BNE   F2               ; MOVE TO NEXT DIGIT
+F2:      JSR    PC,(R3)         ; OUT(CHAR) CHAR ALREADY ON STACK
+         TSTB   (SP)+           ; POP CHAR TO NOWHERE
+         DEC    R4              ; DECREMENT THE COUNTER
+         BNE    F2              ; MOVE TO NEXT DIGIT
 
          MOV    10(SP),R0       ; RETURN ORIGINAL VALUE
          MOV    (SP)+,R4        ; RESTORE R4
