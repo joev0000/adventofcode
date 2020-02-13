@@ -21,6 +21,8 @@
         R5=     %5              ; REGISTER 5
         SP=     %6              ; STACK POINTER
         PC=     %7              ; PROGRAM COUNTER
+        PRS=    177550          ; HIGH SPEED PAPER TAPE READER STATUS
+        PRB=    177552          ; HIGH SPEED PAPER TAPE READER BUFFER
         TPS=    177564          ; TELEPRINTER STATUS WORD
         TPB=    177566          ; TELEPRINTER BUFFER
 
@@ -49,6 +51,19 @@ START:  MOV     #.,SP           ; SET UP STACK
         JSR     PC,PUTS         ; PUTS(CRLF)
         TST     (SP)+           ; CLEAN UP STACK
 
+
+        CLR     MSG+12
+S0:     MOV     #10,-(SP)
+        MOV     #MSG,-(SP)
+        JSR     PC,GETS
+        BEQ     S1
+        JSR     PC,PUTS
+        MOV     #15,-(SP)
+        JSR     PC,PUTC
+        ADD     #6,SP
+        BR      S0
+
+S1:     ADD     #4,SP
         HALT                    ; PROGRAM COMPLETE
         BR      START           ; RESTART ON CONTINUE
 
@@ -89,6 +104,32 @@ PS1:    TSTB    TPS             ; IS THE TTY READY?
         MOVB    (R0)+,TPB       ; WRITE BYTE TO TTY, INC PTR
         BR      PS0             ; CONTINUE
 PS2:    RTS     PC              ; RETURN TO CALLER
+
+;
+; GETS(BUFFER, SIZE)
+;
+; READ A LINE FROM THE HIGH SPEED PAPER TAPE READER USING
+; PROGRAMMED I/O
+;
+GETS:   MOV     2(SP),R0        ; R0 <- BUFFER
+        MOV     4(SP),R1        ; R1 <- SIZE
+G0:     BEQ     G4              ; IF SIZE IS ZERO, DONE
+G1:     INC     PRS             ; SET PRS ENABLE
+G3:     BIT     #100200,PRS     ; IS BYTE AVAILABLE OR ERROR?
+        BEQ     G3              ; IF NOT, TRY AGAIN
+        BMI     G5              ; IF ERROR (END OF TAPE), DONE
+        MOVB    PRB,(R0)        ; READ BYTE INTO BUFFER
+        BEQ     G1              ; SKIP NUL BYTE
+        CMPB    #12,(R0)+       ; IS IT LF?
+        BEQ     G4              ; IF SO, DONE
+        DEC     R1              ; DECREMENT THE COUNTER
+        BR      G0              ; NEXT BYTE
+
+G4:     CLRB    (R0)            ; NUL TERMINATE
+        MOV     2(SP),R0        ; BUFFER IS RETURN VALUE
+        RTS     PC              ; RETURN TO CALLER
+G5:     CLR     R0              ; EOF, RETURN VALUE IS ZERO
+        RTS     PC              ; RETURN TO CALLER
 
 ;
 ; FU1610(VALUE, OUT)

@@ -52,4 +52,4 @@ GO 157500
 
 ECHO ...Running program
 ECHO ------------------------------------------------------------
-GO 1000
+ECHO Load tape, then GO 1000
