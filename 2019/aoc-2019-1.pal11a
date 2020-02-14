@@ -51,20 +51,13 @@ START:  MOV     #.,SP           ; SET UP STACK
         JSR     PC,PUTS         ; PUTS(CRLF)
         TST     (SP)+           ; CLEAN UP STACK
 
+        MOV     #GETC,-(SP)     ; PUSH GETC SUBROUTINE
+S0:     JSR     PC,P10U32       ; P10U32(GETC)
+        BCC     S0              ; IF NO ERROR, PARSE NEXT LINE
+        TST     (SP)+           ; CLEAN UP STACK
 
-        CLR     MSG+12
-S0:     MOV     #10,-(SP)
-        MOV     #MSG,-(SP)
-        JSR     PC,GETS
-        BEQ     S1
-        JSR     PC,PUTS
-        MOV     #15,-(SP)
-        JSR     PC,PUTC
-        ADD     #6,SP
-        BR      S0
 
-S1:     ADD     #4,SP
-        HALT                    ; PROGRAM COMPLETE
+S1:     HALT                    ; PROGRAM COMPLETE
         BR      START           ; RESTART ON CONTINUE
 
 MSG:    .ASCII  /ADVENT OF CODE 2019 DAY 1/
@@ -104,6 +97,20 @@ PS1:    TSTB    TPS             ; IS THE TTY READY?
         MOVB    (R0)+,TPB       ; WRITE BYTE TO TTY, INC PTR
         BR      PS0             ; CONTINUE
 PS2:    RTS     PC              ; RETURN TO CALLER
+
+;
+; GETC() -> R0L: THE BYTE READ.  SETS CARRY ON ERROR.
+;
+; GET A BYTE FROM THE HIGH SPEED PAPER TAPE
+GETC: INC PRS                   ; SET PRS ENABLE
+GC1:  BIT       #100200,PRS     ; IS BYTE AVAILABLE OR ERROR?
+      BEQ       GC1             ; IF NOT, KEEP TRYING
+      BMI       GC2             ; IF ERROR, DONE
+      MOVB      PRB,R0          ; PUT BYTE INTO R0
+      CLC                       ; CLEAR CARRY (ERROR) FLAG
+      RTS       PC              ; RETURN TO CALLER
+GC2:  SEC                       ; SET CARRY (ERROR) FLAG
+      RTS       PC              ; RETURN TO CALLER
 
 ;
 ; GETS(BUFFER, SIZE)
@@ -165,6 +172,63 @@ F2:      JSR    PC,(R3)         ; OUT(CHAR) CHAR ALREADY ON STACK
          MOV    (SP)+,R2        ; RESTORE R2
          RTS    PC              ; RETURN TO CALLER
 
+;
+; P10U32(IN) -> R0: HI, R1: LO
+;
+; PARSE A 32 BIT VALUE FROM DECIMAL STRING, USING THE IN SUBROUTINE.
+; CONSUMES THE FIRST NON-DECIMAL-DIGIT AFTER THE NUMBER
+P10U32: MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     R4,-(SP)        ; SAVE R4
+        MOV     R5,-(SP)        ; SAVE R5
+        MOV     12(SP),R5       ; R5 <- IN
+
+        CLR     R0              ; CLEAR R0
+        CLR     R1              ; CLEAR R1
+        CLR     R2              ; CLEAR HI RESULT
+        CLR     R3              ; CLEAR LO RESULT
+
+P101:   JSR     PC,(R5)         ; CALL IN SUBRUTINE
+        MOV     R0,R4           ; STASH BYTE IN R4
+        BCS     P102            ; IF ERROR, DONE
+        CMP     R0,#60          ; IS IT LESS THAN '0'?
+        BMI     P103            ;   YES, DONE
+        CMP     #71,R0          ; IS IT GREATER THAN '9'?
+        BMI     P103            ;   YES, DONE
+        SUB     #60,R4          ; CONVERT ASCII TO INT
+
+        ; THIS SECTION IMPLEMENTS R2R3 = R2R3 * 10D + R4
+        MOV     R4,-(SP)        ; STASH THE NEW DIGIT
+        MOV     R3,-(SP)        ; PUSH LO RESULT
+        MOV     #12,-(SP)       ; PUSH 10D
+        JSR     PC,MULU16       ; MULU16(LO,10D) -> R0R1
+        ADD     #4,SP           ; CLEAN UP STACK
+        MOV     R1,R3           ; LO RESULT = LO(LO* 10D)
+        MOV     R0,R4           ; CARRY = HI(LO * 10D)
+
+        MOV     R2,-(SP)        ; PUSH HI RESULT
+        MOV     #12,-(SP)       ; PUSH 10D
+        JSR     PC,MULU16       ; MULU16(HI,10D) -> R0R1
+        ADD     #4,SP           ; CLEAN UP STACK
+        MOV     R1,R2           ; HI RESULT = LO(HI * 10D)
+        ADD     R4,R2           ; HI RESULT += CARRY
+
+        MOV     (SP)+,R4        ; RESTORE NEW DIGIT TO R4
+        ADD     R4,R3           ; ADD IT TO LO RESULT
+        ADC     R2              ; ADD ANY CARRY TO HI (PROB. NOT USED)
+
+        BR      P101            ; NEXT DIGIT
+
+P103:   CLC                     ; CLEAR ERROR INDICATOR
+P102:   MOV     R2,R0           ; HI RESULT <- R2
+        MOV     R3,R1           ; LO RESULT <- R3
+        MOV     (SP)+,R5        ; RESTORE R5
+        MOV     (SP)+,R4        ; RESTORE R4
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        RTS     PC              ; RETURN TO CALLER
+
+;
 ;
 ; MULU16(MULTIPLICAND, MULTIPLIER) -> R0: HI, R1: LO
 ;
