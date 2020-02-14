@@ -164,6 +164,37 @@ F2:      JSR    PC,(R3)         ; OUT(CHAR) CHAR ALREADY ON STACK
          MOV    (SP)+,R3        ; RESTORE R3
          MOV    (SP)+,R2        ; RESTORE R2
          RTS    PC              ; RETURN TO CALLER
+
+;
+; MULU16(MULTIPLICAND, MULTIPLIER) -> R0: HI, R1: LO
+;
+; UNSIGNED 16-BIT MULTIPLICATION
+;
+
+MULU16: CLR     R0
+        CLR     R1
+
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     R4,-(SP)        ; SAVE R4
+        MOV     10(SP),R2       ; R2 <- MULTIPLICAND
+        MOV     12(SP),R3       ; R3 <- MULTIPLIER
+        MOV     #20,R4          ; R4 <- COUNTER (16D)
+
+M0:     ASL     R1              ; ROTATE LO RESULT LEFT
+        ROL     R0              ;    AND HI
+        ROL     R3              ; ROTATE MULTIPLIER LEFT
+        BCC     M1              ; IF THE MSB WAS CLEAR, SKIP ADD
+        ADD     R2,R1           ; ADD MULTIPLICAND TO LO RESULT
+        ADC     R0              ;   AND HI
+M1:     DEC     R4              ; DECREMENT THE COUNTER
+        BNE     M0              ; IF NOT ZERO, REPEAT
+
+        MOV     (SP)+,R4        ; RESTORE R4
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        RTS     PC              ; RETURN TO CALLER
+
 ;
 ; DIVU16(DIVIDEND, DIVISOR) -> R0: QUOTIENT, R1: REMAINDER
 ;
