@@ -278,8 +278,8 @@ L0:     MOV     2(SP),R0        ; R0 <- DIVIDEND
 L1:     MOV     R2,-(SP)        ; SAVE R2
         MOV     R3,-(SP)        ; SAVE R3
         MOV     R4,-(SP)        ; SAVE R4
-        CLR     R2              ; R2 <- ACCUMULATOR
-        CLR     R3              ; R3 <- RESULT
+        CLR     R2              ; R2 <- REMAINDER
+        CLR     R3              ; R3 <- QUOTIENT
         MOV     #20,R4          ; R4 <- COUNTER
 
         TST     R0              ; SET N IF MSB SET
@@ -289,24 +289,24 @@ L2:     BMI     L3              ; IF N IS SET, MOVE ON
         BR      L2              ; LOOP
 
 L3:
-        CMP     R2,R1           ; SET N IF ACCUM LESS THAN DIVISOR
+        CMP     R2,R1           ; SET N IF REMAINDER LESS THAN DIVISOR
         BPL     L4              ; IF N SET, GO TO L4
         ASL     R0              ; SHIFT DIVIDEND LEFT
-        ROL     R2              ; ROTATE ACCUM LEFT
-        ASL     R3              ; SHIFT RESULT LEFT
+        ROL     R2              ; ROTATE REMAINDER LEFT
+        ASL     R3              ; SHIFT QUOTIENT LEFT
         DEC     R4              ; DECREMENT COUNTER
         BR      L5
 L4:
-        SUB     R1,R2           ; ACCUM <- ACCUM - DIVISOR
-        BIS     #1,R3           ; SET RESULT LSB
+        SUB     R1,R2           ; REMAINDER <- REMAINDER - DIVISOR
+        BIS     #1,R3           ; SET QUOTIENT LSB
 L5:
         TST     R4              ; IS COUNTER ZERO?
         BNE     L3              ; IF NOT, CONTINUE
 
-        CMP     R2,R1           ; SET N IF ACCUM LESS THAN DIVISOR
+        CMP     R2,R1           ; SET N IF REMAINDER LESS THAN DIVISOR
         BMI     L6              ; IF SO, MOVE ON
-        SUB     R1,R2           ; ACCUM <- ACCUM - DIVISOR
-        BIS     #1,R3           ; SET RESULT LSB
+        SUB     R1,R2           ; REMAINDER <- REMAINDER - DIVISOR
+        BIS     #1,R3           ; SET QUOTIENT LSB
 L6:
         MOV     R2,R1           ; REMAINDER OVERWRITES DIVISOR
         MOV     R3,R0           ; QUOTIENT OVERWRITES DIVIDEND
