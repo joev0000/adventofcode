@@ -37,35 +37,10 @@ START:  MOV     #.,SP           ; SET UP STACK
         TST     (SP)+           ; CLEAN UP STACK
 
 
-        MOV     #PUTC,-(SP)
-        MOV     #001322,-(SP)   ; lo
-        MOV     #044626,-(SP)   ; hi   1234567890(10)
-        JSR     PC,FU3210
-        ADD     #6,SP
-        MOV     #CRLF,-(SP)     ; PUSH CRLF POINTER
-        JSR     PC,PUTS         ; PUTS(CRLF)
-        TST     (SP)+           ; CLEAN UP STACK
-        HALT
-
-
-        MOV     #3,-(SP)        ; PUSH 3D
-        MOV     #3661,-(SP)     ; PUSH 1969D
-        JSR     PC,DIVU16       ; DIVU16(3661, 3)
-        ADD     #4,SP           ; CLEAN UP STACK
-        SUB     #2,R0           ; SUBTRACT 2
-
-        MOV     #PUTC,-(SP)     ; PUSH PUTC SUBROUTINE
-        MOV     R0,-(SP)        ; PUSH VALUE
-        JSR     PC,FU1610       ; FU1610(VALUE, PUTC)
-        ADD     #4,SP           ; CLEAN UP STACK
-
-        MOV     #CRLF,-(SP)     ; PUSH CRLF POINTER
-        JSR     PC,PUTS         ; PUTS(CRLF)
-        TST     (SP)+           ; CLEAN UP STACK
-
         CLR     R2              ; R2 <- SOLUTION HI
         CLR     R3              ; R3 <- SOLUTION LO
-        MOV     #RESULT,R4      ; R4 <- RESULT
+        SUB     #4,SP           ; ALLOCATE DIV RESULT
+        MOV     SP,R4           ; R4 <- RESULT
 
 S0:     MOV     #GETC,-(SP)     ; PUSH GETC SUBROUTINE
         JSR     PC,P10U32       ; P10U32(GETC)
@@ -85,7 +60,17 @@ S0:     MOV     #GETC,-(SP)     ; PUSH GETC SUBROUTINE
         ADD     (R4),R2         ; ADD TO SOLUTION HI
         BR      S0
 
-S2: 
+S2:     MOV     #PUTC,-(SP)     ; PUSH PUTC
+        MOV     R3,-(SP)        ; PUSH SOLUTION LO
+        MOV     R2,-(SP)        ; PUSH SOLUTION HI
+        JSR     PC,FU3210       ; FORMAT AND OUTPUT
+        ADD     #6,SP           ; CLEAN UP STACK
+
+        MOV     #CRLF,-(SP)     ; PUSH CRLF
+        JSR     PC,PUTS         ; PUTS
+        TST     (SP)+           ; CLEAN UP STACK
+
+        ADD     #4,SP           ; DEALLOCATE RESULT BUFFER
 
 S1:     HALT                    ; PROGRAM COMPLETE
         BR      START           ; RESTART ON CONTINUE
