@@ -297,4 +297,55 @@ DD3:
         CLV                     ; INDICATE NO ERROR
         RTS     PC              ; RETURN TO CALLER
 
+; DIVU32(DIVIDEND HI, DIVIDEND LO, DIVISOR HI, DIVISOR LO, RESULT) -> R0: RESULT
+; (RESULT) -> QUOTIENT HI, QUOTIENT LO, REMAINDER HI, REMAINDER LO
+;
+; UNSIGNED 32-BIT DIVISION
+;
+DIVU32:
+        TST     10(SP)          ; CHECK DIVISOR LO
+        BNE     DA1             ; IF NOT ZERO, CONTINUE
+        TST     6(SP)           ; CHECK DIVISOR HI
+        BNE     DA1             ; IF NOT ZERO, CONTINUE
+        SEV                     ; SET OVERFLOW (ERROR)
+        RTS     PC              ; RETURN TO CALLER
+DA1:
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     R4,-(SP)        ; SAVE R4
+
+        MOV     20(SP),R0       ; R0 <- RESULT
+        MOV     10(SP),R2       ; R2 <- DIVIDEND HI
+        MOV     12(SP),R3       ; R3 <- DIVIDEND LO
+        MOV     #40,R4          ; R4 <- COUNTER
+        CLR     (R0)            ; CLEAR QUOTIENT HI
+        CLR     2(R0)           ; CLEAR QOUTIENT LO
+        CLR     4(R0)           ; CLEAR REMAINDER HI
+        CLR     6(R0)           ; CLEAR REMAINDER LO
+DA2:
+        ASL     2(R0)           ; SHIFT QUOTIENT LO LEFT
+        ROL     (R0)            ; ROTATE QUOTIENT HI LEFT WITH CARRY
+        ASL     R3              ; SHIFT DIVIDEND LO LEFT
+        ROL     R2              ; ROTATE DIVIDEND HI LEFT WITH CARRY
+        ROL     6(R0)           ; ROTATE REMAINDER LO LEFT WITH CARRY
+        ROL     4(R0)           ; ROTATE REMAINDER HI LEFT WITH CARRY
+        CMP     4(R0),14(SP)    ; COMPARE REMAINDER HI AND DIVISOR HI
+        BMI     DA3             ; IF DIVISOR HI > REMAINDER HI, CONT
+        BNE     DA4
+        CMP     6(R0),16(SP)    ; COMPARE REMAINDER LO AND DIVISOR LO
+        BMI     DA3             ; IF DIVISOR LO > REMAINDER LO, CONT
+DA4:    SUB     16(SP),6(R0)    ; REMAINDER LO -= DIVISOR LO
+        SBC     4(R0)           ; SUBTRACT CARRY FROM DIVISOR HI
+        SUB     14(SP),4(R0)    ; REMAINDER HI -= DIVISOR HI
+        BIS     #1,2(R0)        ; SET LOW BIT IN QUOTIENT
+DA3:
+        DEC     R4              ; DECREMENT COUNTER
+        BNE     DA2             ; IF NOT ZERO, REPEAT
+
+        MOV     (SP)+,R4        ; RESTORE R4
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        CLV                     ; CLEAR ERROR FLAG
+        RTS     PC              ; RETURN TO CALLER
+
         .END
