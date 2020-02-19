@@ -36,6 +36,18 @@ START:  MOV     #.,SP           ; SET UP STACK
         JSR     PC,PUTS         ; PUTS(MESSAGE)
         TST     (SP)+           ; CLEAN UP STACK
 
+
+        MOV     #PUTC,-(SP)
+        MOV     #001322,-(SP)   ; lo
+        MOV     #044626,-(SP)   ; hi   1234567890(10)
+        JSR     PC,FU3210
+        ADD     #6,SP
+        MOV     #CRLF,-(SP)     ; PUSH CRLF POINTER
+        JSR     PC,PUTS         ; PUTS(CRLF)
+        TST     (SP)+           ; CLEAN UP STACK
+        HALT
+
+
         MOV     #3,-(SP)        ; PUSH 3D
         MOV     #3661,-(SP)     ; PUSH 1969D
         JSR     PC,DIVU16       ; DIVU16(3661, 3)
@@ -199,7 +211,51 @@ F2:      JSR    PC,(R3)         ; OUT(CHAR) CHAR ALREADY ON STACK
 ; FOR EACH DIGIT.
 ;
 FU3210:
+        MOV     R0,-(SP)        ; SAVE R0
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     R4,-(SP)        ; SAVE R4
 
+        SUB     #10,SP          ; SPACE FOR RESULT
+
+        MOV     24(SP),R0       ; R0 <- VALUE HI
+        MOV     26(SP),R1       ; R1 <- VALUE LO
+        MOV     SP,R2           ; R2 <- RESULT ADDRESS
+        MOV     30(SP),R3       ; R3 <- OUT SUBROUTINE
+        CLR     R4              ; R4 <- COUNTER
+
+FF1:    MOV     R2,-(SP)        ; PUSH BUFFER ADDRESS
+        MOV     #12,-(SP)       ; PUSH DIVISOR LO
+        CLR     -(SP)           ; PUSH DIVISOR HI
+        MOV     R1,-(SP)        ; PUSH DIVIDEND LO
+        MOV     R0,-(SP)        ; PUSH DIVIDEND HI
+        JSR     PC,DIVU32       ; DIVIDE
+        ADD     #12,SP          ; CLEAN UP STACK
+        MOV     (SP),R0         ; STORE QUOTIENT HI IN R0
+        MOV     2(SP),R1        ; STORE QUOTIENT LO IN R1
+
+        ADD     #60,6(SP)       ; CONVERT REMAINDER TO DECIMAL DIGIT
+        MOVB    6(SP),-(SP)     ; PUSH CHARACTER TO STACK
+        INC     R4              ; INCREMENT COUNTER
+        TST     R1              ; IS QUOTIENT LO ZERO?
+        BNE     FF1             ; NO, REPEAT
+        TST     R0              ; IS QUOTIENT HI ZERO?
+        BNE     FF1             ; NO, REPEAT
+
+FF2:
+        JSR     PC,(R3)         ; OUTPUT FIRST DIGIT
+        TST     (SP)+           ; POP CHAR OFF STACK
+        DEC     R4              ; DECREMENT COUNTER
+        BNE     FF2             ; IF NOT DONE, NEXT CHAR
+
+        ADD     #10,SP          ; RELENQUISH RESULT SPACE
+        MOV     (SP)+,R4        ; RESTORE R4
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        MOV     (SP)+,R1        ; RESTORE R1
+        MOV     (SP)+,R0        ; RESTORE R0
+        RTS     PC              ; RETURN TO CALLER
 
 ; P10U32(IN) -> R0: HI, R1: LO
 ;
