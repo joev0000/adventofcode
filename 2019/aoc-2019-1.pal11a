@@ -51,17 +51,37 @@ START:  MOV     #.,SP           ; SET UP STACK
         JSR     PC,PUTS         ; PUTS(CRLF)
         TST     (SP)+           ; CLEAN UP STACK
 
-        MOV     #GETC,-(SP)     ; PUSH GETC SUBROUTINE
-S0:     JSR     PC,P10U32       ; P10U32(GETC)
-        BCC     S0              ; IF NO ERROR, PARSE NEXT LINE
-        TST     (SP)+           ; CLEAN UP STACK
+        CLR     R2              ; R2 <- SOLUTION HI
+        CLR     R3              ; R3 <- SOLUTION LO
+        MOV     #RESULT,R4      ; R4 <- RESULT
 
+S0:     MOV     #GETC,-(SP)     ; PUSH GETC SUBROUTINE
+        JSR     PC,P10U32       ; P10U32(GETC)
+        TST     (SP)+           ; CLEAN UP STACK
+        BCS     S2              ; IF ERROR, NO MORE DATA
+        MOV     R4,-(SP)        ; PUSH RESULT BUFFER
+        MOV     #3,-(SP)        ; PUSH DIVISOR = 3
+        CLR     -(SP)           ;   "
+        MOV     R1,-(SP)        ; PUSH DIVIDEND LO
+        MOV     R0,-(SP)        ; PUSH DIVIDEND HI
+        JSR     PC,DIVU32       ; DIVU32(DIVIDEND, DIVISOR, RESULT)
+        ADD     #12,SP          ; CLEAN UP STACK
+        SUB     #2,2(R4)        ; SUBTRACT 2 FROM QUOTIENT LO
+        SBC     (R4)            ; SUBTRACT CARRY FROM QUOTIENT HI
+        ADD     2(R4),R3        ; ADD TO SOLUTION LO
+        ADC     R2              ; ADD CARRY TO SOLUTION HI
+        ADD     (R4),R2         ; ADD TO SOLUTION HI
+        BR      S0
+
+S2: 
 
 S1:     HALT                    ; PROGRAM COMPLETE
         BR      START           ; RESTART ON CONTINUE
 
 MSG:    .ASCII  /ADVENT OF CODE 2019 DAY 1/
 CRLF:   .BYTE   15,12,0         ; CR,LF
+RESULT: .WORD   0,0,0,0
+
 
 ;
 ; LIBRARY CODE
@@ -173,6 +193,14 @@ F2:      JSR    PC,(R3)         ; OUT(CHAR) CHAR ALREADY ON STACK
          RTS    PC              ; RETURN TO CALLER
 
 ;
+; FU3210(VALUE HI, VALUE LO, OUT)
+;
+; FORAMT AN UNSIGNED DOUBLE WORD TO DECIMAL, CALLING THE OUT SUBROUTINE
+; FOR EACH DIGIT.
+;
+FU3210:
+
+
 ; P10U32(IN) -> R0: HI, R1: LO
 ;
 ; PARSE A 32 BIT VALUE FROM DECIMAL STRING, USING THE IN SUBROUTINE.
@@ -297,7 +325,8 @@ DD3:
         CLV                     ; INDICATE NO ERROR
         RTS     PC              ; RETURN TO CALLER
 
-; DIVU32(DIVIDEND HI, DIVIDEND LO, DIVISOR HI, DIVISOR LO, RESULT) -> R0: RESULT
+; DIVU32(DIVIDEND HI, DIVIDEND LO, DIVISOR HI, DIVISOR LO, RESULT) ->
+;   R0: RESULT
 ; (RESULT) -> QUOTIENT HI, QUOTIENT LO, REMAINDER HI, REMAINDER LO
 ;
 ; UNSIGNED 32-BIT DIVISION
