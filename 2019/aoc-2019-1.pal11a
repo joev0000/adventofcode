@@ -218,25 +218,27 @@ FU3210:
         MOV     R4,-(SP)        ; SAVE R4
 
         SUB     #10,SP          ; SPACE FOR RESULT
+        SUB     #12,SP          ; SPACE FOR OUTPUT BUFFER
 
-        MOV     24(SP),R0       ; R0 <- VALUE HI
-        MOV     26(SP),R1       ; R1 <- VALUE LO
+        MOV     36(SP),R0       ; R0 <- VALUE HI
+        MOV     40(SP),R1       ; R1 <- VALUE LO
         MOV     SP,R2           ; R2 <- RESULT ADDRESS
-        MOV     30(SP),R3       ; R3 <- OUT SUBROUTINE
+        ADD     #12,R2          ;    "
+        MOV     SP,R3           ; R3 <- BUFFER
         CLR     R4              ; R4 <- COUNTER
 
-FF1:    MOV     R2,-(SP)        ; PUSH BUFFER ADDRESS
-        MOV     #12,-(SP)       ; PUSH DIVISOR LO
-        CLR     -(SP)           ; PUSH DIVISOR HI
+FF1:    MOV     R2,-(SP)        ; PUSH RESULT ADDRESS
+        MOV     #12,-(SP)       ; PUSH DIVISOR LO 10(10)
+        CLR     -(SP)           ; PUSH DIVISOR HI  0
         MOV     R1,-(SP)        ; PUSH DIVIDEND LO
         MOV     R0,-(SP)        ; PUSH DIVIDEND HI
         JSR     PC,DIVU32       ; DIVIDE
         ADD     #12,SP          ; CLEAN UP STACK
-        MOV     (SP),R0         ; STORE QUOTIENT HI IN R0
-        MOV     2(SP),R1        ; STORE QUOTIENT LO IN R1
+        MOV     12(SP),R0       ; STORE QUOTIENT HI IN R0
+        MOV     14(SP),R1       ; STORE QUOTIENT LO IN R1
 
-        ADD     #60,6(SP)       ; CONVERT REMAINDER TO DECIMAL DIGIT
-        MOVB    6(SP),-(SP)     ; PUSH CHARACTER TO STACK
+        ADD     #60,20(SP)      ; CONVERT REMAINDER TO DECIMAL DIGIT
+        MOVB    20(SP),(R3)+    ; PUSH CHARACTER TO BUFFER
         INC     R4              ; INCREMENT COUNTER
         TST     R1              ; IS QUOTIENT LO ZERO?
         BNE     FF1             ; NO, REPEAT
@@ -244,11 +246,13 @@ FF1:    MOV     R2,-(SP)        ; PUSH BUFFER ADDRESS
         BNE     FF1             ; NO, REPEAT
 
 FF2:
-        JSR     PC,(R3)         ; OUTPUT FIRST DIGIT
+        MOVB    -(R3),-(SP)     ; PUSH CHAR
+        JSR     PC,@44(SP)      ; OUTPUT FIRST DIGIT
         TST     (SP)+           ; POP CHAR OFF STACK
         DEC     R4              ; DECREMENT COUNTER
         BNE     FF2             ; IF NOT DONE, NEXT CHAR
 
+        ADD     #12,SP          ; RELENQUISH BUFFER SPACE
         ADD     #10,SP          ; RELENQUISH RESULT SPACE
         MOV     (SP)+,R4        ; RESTORE R4
         MOV     (SP)+,R3        ; RESTORE R3
@@ -381,8 +385,7 @@ DD3:
         CLV                     ; INDICATE NO ERROR
         RTS     PC              ; RETURN TO CALLER
 
-; DIVU32(DIVIDEND HI, DIVIDEND LO, DIVISOR HI, DIVISOR LO, RESULT) ->
-;   R0: RESULT
+; DIVU32(DIVIDEND HI, DIVIDEND LO, DIVISOR HI, DIVISOR LO, RESULT)
 ; (RESULT) -> QUOTIENT HI, QUOTIENT LO, REMAINDER HI, REMAINDER LO
 ;
 ; UNSIGNED 32-BIT DIVISION
@@ -395,13 +398,14 @@ DIVU32:
         SEV                     ; SET OVERFLOW (ERROR)
         RTS     PC              ; RETURN TO CALLER
 DA1:
+        MOV     R0,-(SP)        ; SAVE R0
         MOV     R2,-(SP)        ; SAVE R2
         MOV     R3,-(SP)        ; SAVE R3
         MOV     R4,-(SP)        ; SAVE R4
 
-        MOV     20(SP),R0       ; R0 <- RESULT
-        MOV     10(SP),R2       ; R2 <- DIVIDEND HI
-        MOV     12(SP),R3       ; R3 <- DIVIDEND LO
+        MOV     22(SP),R0       ; R0 <- RESULT
+        MOV     12(SP),R2       ; R2 <- DIVIDEND HI
+        MOV     14(SP),R3       ; R3 <- DIVIDEND LO
         MOV     #40,R4          ; R4 <- COUNTER
         CLR     (R0)            ; CLEAR QUOTIENT HI
         CLR     2(R0)           ; CLEAR QOUTIENT LO
@@ -414,14 +418,14 @@ DA2:
         ROL     R2              ; ROTATE DIVIDEND HI LEFT WITH CARRY
         ROL     6(R0)           ; ROTATE REMAINDER LO LEFT WITH CARRY
         ROL     4(R0)           ; ROTATE REMAINDER HI LEFT WITH CARRY
-        CMP     4(R0),14(SP)    ; COMPARE REMAINDER HI AND DIVISOR HI
+        CMP     4(R0),16(SP)    ; COMPARE REMAINDER HI AND DIVISOR HI
         BMI     DA3             ; IF DIVISOR HI > REMAINDER HI, CONT
         BNE     DA4
-        CMP     6(R0),16(SP)    ; COMPARE REMAINDER LO AND DIVISOR LO
+        CMP     6(R0),20(SP)    ; COMPARE REMAINDER LO AND DIVISOR LO
         BMI     DA3             ; IF DIVISOR LO > REMAINDER LO, CONT
-DA4:    SUB     16(SP),6(R0)    ; REMAINDER LO -= DIVISOR LO
+DA4:    SUB     20(SP),6(R0)    ; REMAINDER LO -= DIVISOR LO
         SBC     4(R0)           ; SUBTRACT CARRY FROM DIVISOR HI
-        SUB     14(SP),4(R0)    ; REMAINDER HI -= DIVISOR HI
+        SUB     16(SP),4(R0)    ; REMAINDER HI -= DIVISOR HI
         BIS     #1,2(R0)        ; SET LOW BIT IN QUOTIENT
 DA3:
         DEC     R4              ; DECREMENT COUNTER
@@ -430,6 +434,7 @@ DA3:
         MOV     (SP)+,R4        ; RESTORE R4
         MOV     (SP)+,R3        ; RESTORE R3
         MOV     (SP)+,R2        ; RESTORE R2
+        MOV     (SP)+,R0        ; RESTORE R0
         CLV                     ; CLEAR ERROR FLAG
         RTS     PC              ; RETURN TO CALLER
 
