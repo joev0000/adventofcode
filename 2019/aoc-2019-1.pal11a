@@ -264,56 +264,37 @@ M1:     DEC     R4              ; DECREMENT THE COUNTER
 ;
 ; UNSIGNED 16-BIT DIVISION
 ;
-DIVU16: MOV     4(SP),R1        ; R1 <- DIVISOR
-        BNE     L0              ; IS DIVISOR ZERO?
-        SEV                     ; INDICATE AN ERROR
+DIVU16:
+        TST     4(SP)           ; CHECK THE DIVISOR
+        BNE     DD1             ; IF NOT ZERO, CONTINUE
+        SEV                     ; SET OVERFLOW (ERROR)
         RTS     PC              ; RETURN TO CALLER
-
-L0:     MOV     2(SP),R0        ; R0 <- DIVIDEND
-        BNE     L1              ; IS DIVIDEND ZERO?
-        CLR     R1              ; SET REMAINDER TO ZERO
-        CLV                     ; INDICATE NO ERROR
-        RTS     PC
-
-L1:     MOV     R2,-(SP)        ; SAVE R2
+DD1:
+        MOV     R2,-(SP)        ; SAVE R2
         MOV     R3,-(SP)        ; SAVE R3
         MOV     R4,-(SP)        ; SAVE R4
-        CLR     R2              ; R2 <- REMAINDER
-        CLR     R3              ; R3 <- QUOTIENT
+
+        CLR     R0              ; R0 <- QUOTIENT
+        CLR     R1              ; R1 <- REMAINDER
+        MOV     10(SP),R2       ; R2 <- DIVIDEND
+        MOV     12(SP),R3       ; R3 <- DIVISOR
         MOV     #20,R4          ; R4 <- COUNTER
+DD2:
+        ASL     R0              ; SHIFT QUOTIENT LEFT
+        ASL     R2              ; SHIFT DIVIDEND LEFT
+        ROL     R1              ; ROTATE REMAINDER LEFT, WITH CARRY
+        CMP     R1,R3           ; IS DIVISOR <= REMAINDER?
+        BMI     DD3             ; NO, CONTINUE
+        SUB     R3,R1           ; REMAINDER -= DIVISOR
+        BIS     #1,R0           ; SET LOW BIT IN QUOTIENT
+DD3:
+        DEC     R4              ; DEC COUNTER
+        BNE     DD2             ; IF NOT ZERO, REPEAT
 
-        TST     R0              ; SET N IF MSB SET
-L2:     BMI     L3              ; IF N IS SET, MOVE ON
-        DEC     R4              ; DECREMENT COUNTER
-        ASL     R0              ; SHIFT DIVIDEND LEFT
-        BR      L2              ; LOOP
-
-L3:
-        CMP     R2,R1           ; SET N IF REMAINDER LESS THAN DIVISOR
-        BPL     L4              ; IF N SET, GO TO L4
-        ASL     R0              ; SHIFT DIVIDEND LEFT
-        ROL     R2              ; ROTATE REMAINDER LEFT
-        ASL     R3              ; SHIFT QUOTIENT LEFT
-        DEC     R4              ; DECREMENT COUNTER
-        BR      L5
-L4:
-        SUB     R1,R2           ; REMAINDER <- REMAINDER - DIVISOR
-        BIS     #1,R3           ; SET QUOTIENT LSB
-L5:
-        TST     R4              ; IS COUNTER ZERO?
-        BNE     L3              ; IF NOT, CONTINUE
-
-        CMP     R2,R1           ; SET N IF REMAINDER LESS THAN DIVISOR
-        BMI     L6              ; IF SO, MOVE ON
-        SUB     R1,R2           ; REMAINDER <- REMAINDER - DIVISOR
-        BIS     #1,R3           ; SET QUOTIENT LSB
-L6:
-        MOV     R2,R1           ; REMAINDER OVERWRITES DIVISOR
-        MOV     R3,R0           ; QUOTIENT OVERWRITES DIVIDEND
-        MOV     +(SP),R4        ; RESTORE R4
-        MOV     +(SP),R3        ; RESTORE R3
-        MOV     +(SP),R2        ; RESTORE R2
-        CLV                     ; NO ERROR
+        MOV     (SP)+,R4        ; RESTORE R4
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        CLV                     ; INDICATE NO ERROR
         RTS     PC              ; RETURN TO CALLER
 
         .END
