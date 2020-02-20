@@ -98,12 +98,43 @@ FREQD:
 
         SUB     #2,2(R4)        ; SUBTRACT 2 FROM QUOTIENT LO
         SBC     (R4)            ; SUBTRACT CARRY FROM QUOTIENT HI
-
+        BPL     FD1             ; IF NON-NEGATIVE, SKIP AHEAD
+        CLR     R0              ; CLAMP RESULT TO ZERO
+        CLR     R1              ; CLAMP RESULT TO ZERO
+        BR      FD2             ; SKIP AHEAD
+FD1:
         MOV     (R4),R0         ; R0 <- QUOTIENT HI
         MOV     2(R4),R1        ; R1 <- QUOTIENT LO
-
+FD2:
         ADD     #10,SP          ; DEALLOCATE RESULT BUFFER
         MOV     (SP)+,R4        ; RESTORE R4
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; FREQW(MASS HI, MASS LO) -> R0: REQ HI, REQ LO
+;
+; GET THE FUEL REQUIREMENT FOR THE WET MASS, COUNTING THE MASS OF THE
+; FUEL
+FREQW:
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+FW1:
+        JSR     PC,FREQD        ; FREQD
+        ADD     #4,SP           ; CLEAN STACK
+
+        ; R0 IS DRY MASS HI
+        ; R1 IS DRY MASS LO
+        ; ADD TO WET MASS
+        TST     R1              ; CHECK DRY MASS LO
+        BNE     FW1             ; IF NOT ZERO, LOOP
+        TST     R0              ; CHECK DRY MASS HI
+        BNE     FW1             ; IF NOT ZERO, LOOP
+
+        ; MOV WET MASS HI,R0
+        ; MOV WET MASS LO,R1
+
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
         RTS     PC              ; RETURN TO CALLER
 
 ;
