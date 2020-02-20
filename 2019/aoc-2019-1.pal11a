@@ -32,8 +32,8 @@
         .=      1000            ; ASSEMBLE AT ADDRESS 1000
 START:  MOV     #.,SP           ; SET UP STACK
 
-        MOV     #MSG,-(SP)      ; PUSH MESSAGE POINTER
-        JSR     PC,PUTS         ; PUTS(MESSAGE)
+        MOV     #BANNER,-(SP)   ; PUSH BANNER POINTER
+        JSR     PC,PUTS         ; PUTS(BANNER)
         TST     (SP)+           ; CLEAN UP STACK
 
         CLR     R2              ; R2 <- SOLUTION HI
@@ -46,22 +46,21 @@ S0:     MOV     #GETC,-(SP)     ; PUSH GETC SUBROUTINE
         BCS     S2              ; IF ERROR, NO MORE DATA
         TST     (SP)+           ; CLEAN UP STACK
 
-        MOV     R4,-(SP)        ; PUSH RESULT BUFFER
-        MOV     #3,-(SP)        ; PUSH DIVISOR = 3
-        CLR     -(SP)           ;   "
-        MOV     R1,-(SP)        ; PUSH DIVIDEND LO
-        MOV     R0,-(SP)        ; PUSH DIVIDEND HI
-        JSR     PC,DIVU32       ; DIVU32(DIVIDEND, DIVISOR, RESULT)
-        ADD     #12,SP          ; CLEAN UP STACK
-
-        SUB     #2,2(R4)        ; SUBTRACT 2 FROM QUOTIENT LO
-        SBC     (R4)            ; SUBTRACT CARRY FROM QUOTIENT HI
-        ADD     2(R4),R3        ; ADD TO SOLUTION LO
+        MOV     R1,-(SP)        ; PUSH MASS LO
+        MOV     R0,-(SP)        ; PUSH MASS HI
+        JSR     PC,FREQD        ; FREQD(MASS HI, MASS LO)
+        ADD     #4,SP           ; CLEAN UP STACK
+        ADD     R1,R3           ; ADD TO SOLUTION LO
         ADC     R2              ; ADD CARRY TO SOLUTION HI
-        ADD     (R4),R2         ; ADD TO SOLUTION HI
+        ADD     R0,R2           ; ADD TO SOLUTION HI
         BR      S0
 
 S2:     TST     (SP)+           ; CLEAN UP FROM LAST PARSE
+
+        MOV     #PART1,-(SP)    ; PUSH "PART 1: "
+        JSR     PC,PUTS         ; PUTS("PART 1: ")
+        TST     (SP)+           ; CLEAN UP STACK
+
         MOV     #PUTC,-(SP)     ; PUSH PUTC
         MOV     R3,-(SP)        ; PUSH SOLUTION LO
         MOV     R2,-(SP)        ; PUSH SOLUTION HI
@@ -77,10 +76,45 @@ S2:     TST     (SP)+           ; CLEAN UP FROM LAST PARSE
 S1:     HALT                    ; PROGRAM COMPLETE
         BR      START           ; RESTART ON CONTINUE
 
-MSG:    .ASCII  /ADVENT OF CODE 2019 DAY 1/
-CRLF:   .BYTE   15,12,0         ; CR,LF
-RESULT: .WORD   0,0,0,0
+;
+; FREQD(MASS HI, MASS LO) -> R0: REQ HI, R1: REQ LO
+;
+; GET THE FUEL REQUIREMENT FOR THE DRY MASS, NOT COUNTING THE MASS
+; OF THE FUEL ITSELF.
+FREQD:
+        MOV     R4,-(SP)        ; SAVE R4
+        MOV     4(SP),R0        ; R0 <- MASS HI
+        MOV     6(SP),R1        ; R1 <- MASS LO
+        SUB     #10,SP          ; ALLOCATE RESULT BUFFER
+        MOV     SP,R4           ; R4 <- DIVIDE RESULT
 
+        MOV     R4,-(SP)        ; PUSH RESULT BUFFER
+        MOV     #3,-(SP)        ; PUSH DIVISOR = 3
+        CLR     -(SP)           ;   "
+        MOV     R1,-(SP)        ; PUSH DIVIDEND LO
+        MOV     R0,-(SP)        ; PUSH DIVIDEND HI
+        JSR     PC,DIVU32       ; DIVU32(DIVIDEND, DIVISOR, RESULT)
+        ADD     #12,SP          ; CLEAN UP STACK
+
+        SUB     #2,2(R4)        ; SUBTRACT 2 FROM QUOTIENT LO
+        SBC     (R4)            ; SUBTRACT CARRY FROM QUOTIENT HI
+
+        MOV     (R4),R0         ; R0 <- QUOTIENT HI
+        MOV     2(R4),R1        ; R1 <- QUOTIENT LO
+
+        ADD     #10,SP          ; DEALLOCATE RESULT BUFFER
+        MOV     (SP)+,R4        ; RESTORE R4
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; STATIC DATA
+;
+BANNER: .ASCII  "ADVENT OF CODE 2019 DAY 1"
+CRLF:   .BYTE   15,12,0         ; CR,LF
+PART1:  .ASCII  "PART 1: "
+        .BYTE   0
+PART2:  .ASCII  "PART 2: "
+        .BYTE   0
 
 ;
 ; LIBRARY CODE
