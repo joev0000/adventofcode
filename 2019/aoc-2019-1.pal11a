@@ -36,24 +36,41 @@ START:  MOV     #.,SP           ; SET UP STACK
         JSR     PC,PUTS         ; PUTS(BANNER)
         TST     (SP)+           ; CLEAN UP STACK
 
-        CLR     R2              ; R2 <- SOLUTION HI
-        CLR     R3              ; R3 <- SOLUTION LO
-        SUB     #10,SP          ; ALLOCATE DIV RESULT
-        MOV     SP,R4           ; R4 <- RESULT
+        SUB     #10,SP          ; ALLOCATE LOCAL VARS
+                                ;   0(SP): FUEL REQ DRY HI
+                                ;   2(SP): FUEL REQ DRY LO
+                                ;   4(SP): FUEL REQ WET HI
+                                ;   6(SP): FUEL REQ WET LO
+        MOV     SP,R2
+        ADD     #10,R2
+S3:     CLR     -(R2)
+        CMP     R2,SP
+        BNE     S3
+
 
 S0:     MOV     #GETC,-(SP)     ; PUSH GETC SUBROUTINE
         JSR     PC,P10U32       ; P10U32(GETC)
         BCS     S2              ; IF ERROR, NO MORE DATA
         TST     (SP)+           ; CLEAN UP STACK
+        MOV     R1,R3           ; MASS LO <- RESULT LO
+        MOV     R0,R2           ; MASS HI <- RESULT HI
 
-        MOV     R1,-(SP)        ; PUSH MASS LO
-        MOV     R0,-(SP)        ; PUSH MASS HI
+        MOV     R3,-(SP)        ; PUSH MASS LO
+        MOV     R2,-(SP)        ; PUSH MASS HI
         JSR     PC,FREQD        ; FREQD(MASS HI, MASS LO)
         ADD     #4,SP           ; CLEAN UP STACK
-        ADD     R1,R3           ; ADD TO SOLUTION LO
-        ADC     R2              ; ADD CARRY TO SOLUTION HI
-        ADD     R0,R2           ; ADD TO SOLUTION HI
-        BR      S0
+        ADD     R1,2(SP)        ; ADD TO FUEL REQ DRY LO
+        ADC     (SP)            ; ADD CARRY TO FUEL REQ DRY HI
+        ADD     R0,(SP)         ; ADD TO FUEL REQ DRY HI
+
+        MOV     R3,-(SP)        ; PUSH MASS LO
+        MOV     R2,-(SP)        ; PUSH MASS HI
+        JSR     PC,FREQW        ; FREQW(MASS HI, MASS LO)
+        ADD     #4,SP           ; CLEAN UP STACK
+        ADD     R1,6(SP)        ; ADD TO FUEL REQ WET LO
+        ADC     4(SP)           ; ADD CARRY TO FUEL REQ WET HI
+        ADD     R0,4(SP)        ; ADD TO FUEL REQ WET HI
+        BR      S0              ; NEXT COMPONENT
 
 S2:     TST     (SP)+           ; CLEAN UP FROM LAST PARSE
 
@@ -62,8 +79,8 @@ S2:     TST     (SP)+           ; CLEAN UP FROM LAST PARSE
         TST     (SP)+           ; CLEAN UP STACK
 
         MOV     #PUTC,-(SP)     ; PUSH PUTC
-        MOV     R3,-(SP)        ; PUSH SOLUTION LO
-        MOV     R2,-(SP)        ; PUSH SOLUTION HI
+        MOV     R3,-(SP)        ; PUSH FUEL REQ DRY LO
+        MOV     R2,-(SP)        ; PUSH FUEL REQ DRY HI
         JSR     PC,FU3210       ; FORMAT AND OUTPUT
         ADD     #6,SP           ; CLEAN UP STACK
 
@@ -71,7 +88,21 @@ S2:     TST     (SP)+           ; CLEAN UP FROM LAST PARSE
         JSR     PC,PUTS         ; PUTS
         TST     (SP)+           ; CLEAN UP STACK
 
-        ADD     #10,SP          ; DEALLOCATE RESULT BUFFER
+        MOV     #PART2,-(SP)    ; PUSH "PART 2: "
+        JSR     PC,PUTS         ; PUTS("PART 2: ")
+        TST     (SP)+           ; CLEAN UP STACK
+
+        MOV     #PUTC,-(SP)     ; PUSH PUTC
+        MOV     R3,-(SP)        ; PUSH FUEL REQ WET LO
+        MOV     R2,-(SP)        ; PUSH FUEL REQ WET HI
+        JSR     PC,FU3210       ; FORMAT AND OUTPUT
+        ADD     #6,SP           ; CLEAN UP STACK
+
+        MOV     #CRLF,-(SP)     ; PUSH CRLF
+        JSR     PC,PUTS         ; PUTS
+        TST     (SP)+           ; CLEAN UP STACK
+
+        ADD     #10,SP          ; DEALLOCATE LOCAL VARS
 
 S1:     HALT                    ; PROGRAM COMPLETE
         BR      START           ; RESTART ON CONTINUE
@@ -111,27 +142,34 @@ FD2:
         RTS     PC              ; RETURN TO CALLER
 
 ;
-; FREQW(MASS HI, MASS LO) -> R0: REQ HI, REQ LO
+; FREQW(MASS HI, MASS LO) -> R0: REQ HI, R1: REQ LO
 ;
 ; GET THE FUEL REQUIREMENT FOR THE WET MASS, COUNTING THE MASS OF THE
 ; FUEL
 FREQW:
         MOV     R2,-(SP)        ; SAVE R2
         MOV     R3,-(SP)        ; SAVE R3
+
+        CLR     R2              ; R2 <- REQ HI
+        CLR     R3              ; R3 <- REQ LO
+
+        MOV     6(SP),R0        ; R0 <- MASS HI
+        MOV     10(SP),R1       ; R1 <- MASS LO
 FW1:
+        JSR     R1,-(SP)        ; PUSH MASS LO
+        JSR     R0,-(SP)        ; PUSH MASS HI
         JSR     PC,FREQD        ; FREQD
         ADD     #4,SP           ; CLEAN STACK
-
-        ; R0 IS DRY MASS HI
-        ; R1 IS DRY MASS LO
-        ; ADD TO WET MASS
+        ADD     R1,R3           ; REQ LO = REQ LO + MASS LO
+        ADC     R3              ; REQ HI = REQ HI + CARRY
+        ADD     R0,R2           ; REQ HI = REQ HI + MASS HI
         TST     R1              ; CHECK DRY MASS LO
         BNE     FW1             ; IF NOT ZERO, LOOP
         TST     R0              ; CHECK DRY MASS HI
         BNE     FW1             ; IF NOT ZERO, LOOP
 
-        ; MOV WET MASS HI,R0
-        ; MOV WET MASS LO,R1
+        MOV     R3,R1           ; REQ LO
+        MOV     R2,R0           ; REQ HI
 
         MOV     (SP)+,R3        ; RESTORE R3
         MOV     (SP)+,R2        ; RESTORE R2
