@@ -36,16 +36,16 @@ START:  MOV     #.,SP           ; SET UP STACK
         JSR     PC,PUTS         ; PUTS(MESSAGE)
         TST     (SP)+           ; CLEAN UP STACK
 
-
         CLR     R2              ; R2 <- SOLUTION HI
         CLR     R3              ; R3 <- SOLUTION LO
-        SUB     #4,SP           ; ALLOCATE DIV RESULT
+        SUB     #10,SP          ; ALLOCATE DIV RESULT
         MOV     SP,R4           ; R4 <- RESULT
 
 S0:     MOV     #GETC,-(SP)     ; PUSH GETC SUBROUTINE
         JSR     PC,P10U32       ; P10U32(GETC)
-        TST     (SP)+           ; CLEAN UP STACK
         BCS     S2              ; IF ERROR, NO MORE DATA
+        TST     (SP)+           ; CLEAN UP STACK
+
         MOV     R4,-(SP)        ; PUSH RESULT BUFFER
         MOV     #3,-(SP)        ; PUSH DIVISOR = 3
         CLR     -(SP)           ;   "
@@ -53,6 +53,7 @@ S0:     MOV     #GETC,-(SP)     ; PUSH GETC SUBROUTINE
         MOV     R0,-(SP)        ; PUSH DIVIDEND HI
         JSR     PC,DIVU32       ; DIVU32(DIVIDEND, DIVISOR, RESULT)
         ADD     #12,SP          ; CLEAN UP STACK
+
         SUB     #2,2(R4)        ; SUBTRACT 2 FROM QUOTIENT LO
         SBC     (R4)            ; SUBTRACT CARRY FROM QUOTIENT HI
         ADD     2(R4),R3        ; ADD TO SOLUTION LO
@@ -60,7 +61,8 @@ S0:     MOV     #GETC,-(SP)     ; PUSH GETC SUBROUTINE
         ADD     (R4),R2         ; ADD TO SOLUTION HI
         BR      S0
 
-S2:     MOV     #PUTC,-(SP)     ; PUSH PUTC
+S2:     TST     (SP)+           ; CLEAN UP FROM LAST PARSE
+        MOV     #PUTC,-(SP)     ; PUSH PUTC
         MOV     R3,-(SP)        ; PUSH SOLUTION LO
         MOV     R2,-(SP)        ; PUSH SOLUTION HI
         JSR     PC,FU3210       ; FORMAT AND OUTPUT
@@ -70,7 +72,7 @@ S2:     MOV     #PUTC,-(SP)     ; PUSH PUTC
         JSR     PC,PUTS         ; PUTS
         TST     (SP)+           ; CLEAN UP STACK
 
-        ADD     #4,SP           ; DEALLOCATE RESULT BUFFER
+        ADD     #10,SP          ; DEALLOCATE RESULT BUFFER
 
 S1:     HALT                    ; PROGRAM COMPLETE
         BR      START           ; RESTART ON CONTINUE
@@ -93,10 +95,12 @@ RESULT: .WORD   0,0,0,0
 ;
 ; WRITE A CHARACTER TO TELEPRINTER USING PROGRAMMED I/O
 ;
-PUTC:   MOV     2(SP),R0        ; R0 <- CHAR
+PUTC:   MOV     R0,-(SP)        ; SAVE R0
+        MOV     4(SP),R0        ; R0 <- CHAR
 PC1:    TSTB    TPS             ; IS THE TTY READY?
         BPL     PC1             ; IF NOT, TRY AGAIN
         MOVB    R0,TPB          ; WRITE BYTE TO TTY, INC PTR
+        MOV     (SP)+,R0        ; RESTORE R0
         RTS     PC              ; RETURN TO CALLER
 
 
@@ -106,14 +110,16 @@ PC1:    TSTB    TPS             ; IS THE TTY READY?
 ; WRITE NULL-TERMINATED STRING TO TELEPRINTER
 ; USING PROGRAMMED I/O
 ;
-PUTS:   MOV     2(SP),R0        ; R0 <- BUFFER
+PUTS:   MOV     R0,-(SP)        ; SAVE R0
+        MOV     4(SP),R0        ; R0 <- BUFFER
 PS0:    TSTB    @R0             ; IS THE BYTE ZERO?
         BEQ     PS2             ; YES, DONE
 PS1:    TSTB    TPS             ; IS THE TTY READY?
         BPL     PS1             ; IF NOT, TRY AGAIN
         MOVB    (R0)+,TPB       ; WRITE BYTE TO TTY, INC PTR
         BR      PS0             ; CONTINUE
-PS2:    RTS     PC              ; RETURN TO CALLER
+PS2:    MOV     (SP)+,R0        ; RESTORE R0
+        RTS     PC              ; RETURN TO CALLER
 
 ;
 ; GETC() -> R0L: THE BYTE READ.  SETS CARRY ON ERROR.
