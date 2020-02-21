@@ -78,6 +78,9 @@ S2:     TST     (SP)+           ; CLEAN UP FROM LAST PARSE
         JSR     PC,PUTS         ; PUTS("PART 1: ")
         TST     (SP)+           ; CLEAN UP STACK
 
+        MOV     2(SP),R3
+        MOV     (SP),R2
+
         MOV     #PUTC,-(SP)     ; PUSH PUTC
         MOV     R3,-(SP)        ; PUSH FUEL REQ DRY LO
         MOV     R2,-(SP)        ; PUSH FUEL REQ DRY HI
@@ -91,6 +94,9 @@ S2:     TST     (SP)+           ; CLEAN UP FROM LAST PARSE
         MOV     #PART2,-(SP)    ; PUSH "PART 2: "
         JSR     PC,PUTS         ; PUTS("PART 2: ")
         TST     (SP)+           ; CLEAN UP STACK
+
+        MOV     6(SP),R3
+        MOV     4(SP),R2
 
         MOV     #PUTC,-(SP)     ; PUSH PUTC
         MOV     R3,-(SP)        ; PUSH FUEL REQ WET LO
@@ -156,12 +162,13 @@ FREQW:
         MOV     6(SP),R0        ; R0 <- MASS HI
         MOV     10(SP),R1       ; R1 <- MASS LO
 FW1:
-        JSR     R1,-(SP)        ; PUSH MASS LO
-        JSR     R0,-(SP)        ; PUSH MASS HI
+        MOV     R1,-(SP)        ; PUSH MASS LO
+        MOV     R0,-(SP)        ; PUSH MASS HI
         JSR     PC,FREQD        ; FREQD
         ADD     #4,SP           ; CLEAN STACK
+
         ADD     R1,R3           ; REQ LO = REQ LO + MASS LO
-        ADC     R3              ; REQ HI = REQ HI + CARRY
+        ADC     R2              ; REQ HI = REQ HI + CARRY
         ADD     R0,R2           ; REQ HI = REQ HI + MASS HI
         TST     R1              ; CHECK DRY MASS LO
         BNE     FW1             ; IF NOT ZERO, LOOP
