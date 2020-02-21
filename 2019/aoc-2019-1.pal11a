@@ -41,11 +41,12 @@ START:  MOV     #.,SP           ; SET UP STACK
                                 ;   2(SP): FUEL REQ DRY LO
                                 ;   4(SP): FUEL REQ WET HI
                                 ;   6(SP): FUEL REQ WET LO
-        MOV     SP,R2
-        ADD     #10,R2
-S3:     CLR     -(R2)
-        CMP     R2,SP
-        BNE     S3
+
+        MOV     SP,R2           ; R2 <-SP, TO CLEAR LOCAL VARS
+        ADD     #10,R2          ; ADD 8(10) TO R2
+S3:     CLR     -(R2)           ; CLEAR WORD
+        CMP     R2,SP           ; ARE WE DONE?
+        BNE     S3              ; IF NOT, MOVE TO NEXT WORD
 
 
 S0:     MOV     #GETC,-(SP)     ; PUSH GETC SUBROUTINE
@@ -78,8 +79,8 @@ S2:     TST     (SP)+           ; CLEAN UP FROM LAST PARSE
         JSR     PC,PUTS         ; PUTS("PART 1: ")
         TST     (SP)+           ; CLEAN UP STACK
 
-        MOV     2(SP),R3
-        MOV     (SP),R2
+        MOV     2(SP),R3        ; R3 <- FUEL REQ DRY LO
+        MOV     (SP),R2         ; R2 <- FUEL REQ DRY HI
 
         MOV     #PUTC,-(SP)     ; PUSH PUTC
         MOV     R3,-(SP)        ; PUSH FUEL REQ DRY LO
@@ -95,8 +96,8 @@ S2:     TST     (SP)+           ; CLEAN UP FROM LAST PARSE
         JSR     PC,PUTS         ; PUTS("PART 2: ")
         TST     (SP)+           ; CLEAN UP STACK
 
-        MOV     6(SP),R3
-        MOV     4(SP),R2
+        MOV     6(SP),R3        ; R3 <- FUEL REQ WET LO
+        MOV     4(SP),R2        ; R2 <- FUEL REQ WET HI
 
         MOV     #PUTC,-(SP)     ; PUSH PUTC
         MOV     R3,-(SP)        ; PUSH FUEL REQ WET LO
@@ -424,8 +425,8 @@ P102:   MOV     R2,R0           ; HI RESULT <- R2
 ; UNSIGNED 16-BIT MULTIPLICATION
 ;
 
-MULU16: CLR     R0
-        CLR     R1
+MULU16: CLR     R0              ; CLEAR RESULT HI
+        CLR     R1              ; CLEAR RESULT LO
 
         MOV     R2,-(SP)        ; SAVE R2
         MOV     R3,-(SP)        ; SAVE R3
