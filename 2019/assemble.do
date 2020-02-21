@@ -1,12 +1,8 @@
-ECHO =================
-ECHO Boot & Run PAL-11
-ECHO =================
-
-ECHO ...Set the CPU parameters
+ECHO >> Setting CPU: 11/20, 28kW
 SET CPU 11/20
 SET CPU 56K
 
-ECHO ...disable undesired devices
+ECHO >> Disabling all devices
 SET DZ DISABLE
 SET RK DISABLE
 SET RL DISABLE
@@ -17,11 +13,11 @@ SET RQ DISABLE
 SET TM DISABLE
 SET TQ DISABLE
 
-ECHO ...enable paper tape punch and line printer
+ECHO >> Enabling High Speed Paper Tape Punch and Reader
 SET PTP ENABLE
-SET LPT ENABLE
+SET PTR ENABLE
 
-ECHO ...Load Paper Tape bootstrap loader @ 28kW
+ECHO >> Loading Paper Tape Bootstrap Loader @ 28kW
 DEPOSIT 157744 016701
 DEPOSIT 157746 000026
 DEPOSIT 157750 012702
@@ -38,26 +34,25 @@ DEPOSIT 157774 000765
 DEPOSIT 157776 177550
 DEPOSIT SR 157744
 
-ECHO ...attach ABSOLUTE LOADER papertape
-SET PTR ENABLE
+ECHO >> Attaching Absolute Loader to Paper Tape Reader
 ATTACH PTR DEC-11-L2PC-PO.ptap
 
-ECHO ...Execute bootstrap to load Absolute Loader
+ECHO >> Running bootstrap to load Absolute Loader
 GO 157744
 
-ECHO ...Attach PAL-11A (8K) papertape
+ECHO >> Attaching PAL-11A (8K) papertape
 ATTACH PTR DEC-11-ASXA-PB.ptap
 
 ; Set up responses to PAL-11A initialization
-EXPECT "*S " ATTACH PTR %1.pal11a; SEND AFTER=20000,"H\r\n"; CONT
+EXPECT "*S " ECHO >> Setting PAL-11A options; SEND AFTER=20000,"H\r\n"; CONT
 EXPECT "*B " SEND AFTER=20000,"H/E\r\n"; CONT
 EXPECT "*L " SEND AFTER=20000,"H\r\n"; CONT
-EXPECT "*T " SEND AFTER=20000,"H/3\r\n"; CONT
-EXPECT " END ?" ATTACH PTR %1.pal11a; ATTACH PTP -n %1.lda.ptap; SEND AFTER=20000,"\r\n"; CONT
-EXPECT " END ?" ATTACH PTR %1.pal11a; ATTACH PTP -n %1.out; SEND AFTER=20000,"\r\n"; CONT
-EXPECT "*S " EXIT
+EXPECT "*T " SEND AFTER=20000,"H/3\r\n"; ATTACH PTR %1.pal; ECHO >> Running first pass; CONT
+EXPECT " END ?" ECHO >> Running second pass; ATTACH PTR %1.pal; ATTACH PTP -n %1.lda.ptap; SEND AFTER=20000,"\r\n"; CONT
+EXPECT " END ?" ECHO >> Running third pass; ATTACH PTR %1.pal; ATTACH PTP -n %1.out; SEND AFTER=20000,"\r\n"; CONT
+EXPECT "*S " ECHO >> Done.  Exiting; EXIT
 
-ECHO ...Use absolute loader to load and launch the content of the papertape
+ECHO >> Start Absolute Loader to Load and Run PAL-11A (8K) paper tape
 DEPOSIT SR 157500
 ; Absolute loader occupies xx7474 through xx7743
 ; start address is xx7500

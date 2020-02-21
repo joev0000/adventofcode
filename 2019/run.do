@@ -1,8 +1,8 @@
-ECHO ...Set the CPU parameters
+ECHO >> Setting CPU: 11/20, 28kW
 SET CPU 11/20
 SET CPU 56K
 
-ECHO ...disable undesired devices
+ECHO >> Disabling all devices
 SET DZ DISABLE
 SET RK DISABLE
 SET RL DISABLE
@@ -13,11 +13,14 @@ SET RQ DISABLE
 SET TM DISABLE
 SET TQ DISABLE
 
-ECHO ...enable paper tape punch and line printer
+ECHO >> Enabling High Speed Paper Tape Punch and Reader
 SET PTP ENABLE
+SET PTR ENABLE
+
+ECHO >> Enabling Line Printer
 SET LPT ENABLE
 
-ECHO ...Load Paper Tape bootstrap loader @ 28kW
+ECHO >> Loading Paper Tape Bootstrap Loader @ 28kW
 DEPOSIT 157744 016701
 DEPOSIT 157746 000026
 DEPOSIT 157750 012702
@@ -34,22 +37,20 @@ DEPOSIT 157774 000765
 DEPOSIT 157776 177550
 DEPOSIT SR 157744
 
-ECHO ...attach ABSOLUTE LOADER papertape
-SET PTR ENABLE
+ECHO >> Attaching Absolute Loader to Paper Tape Reader
 ATTACH PTR DEC-11-L2PC-PO.ptap
 
-ECHO ...Execute bootstrap to load Absolute Loader
+ECHO >> Running bootstrap to load Absolute Loader
 GO 157744
 
-ECHO ...Attach program papertape
+ECHO >> Attaching %1 paper tape
 ATTACH PTR %1
 
-ECHO ...Use absolute loader to load and launch the content of the papertape
+ECHO >> Start Absolute Loader to Load and Run %1 paper tape
 DEPOSIT SR 0
 ; Absolute loader occupies xx7474 through xx7743
 ; start address is xx7500
 GO 157500
 
-ECHO ...Running program
-ECHO ------------------------------------------------------------
-ECHO Load tape, then GO 1000
+ECHO >> Attach input paper tape if necessary   (ex: ATTACH PTR (file))
+ECHO >> To start %1, type "GO (START ADDRESS)" (ex: GO 1000)
