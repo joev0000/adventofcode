@@ -51,15 +51,18 @@ This is a physically tedious process, but SimH allows all of this to be
 scripted.  This repository includes a few SimH run scripts that make this
 process easier.
 
-The `assemble.do` script toggles in the bootstrap code, loads the Absolute
-Loader, loads the PAL-11A assembler, attaches the file named `input.pal11a`
-to the paper tape reader, and creates a file named `output.lda.ptap`,
-attaching to the a paper tape punch as its output.  Hint: use a symbolic link
-from `input.pal11a` to the solution source.
+The `assemble.do` script takes a base filename argument, and expects to find
+a file with that name with a `.pal` extension.  The script toggles in the bootstrap 
+code, loads the Absolute Loader, loads the PAL-11A assembler, attaches the `.pal` file
+to the paper tape reader, and creates a file with the base name and an extension of `.lda.ptap`,
+attaching to the a paper tape punch as its output.
 
-The `run.do` script toggles in the bootstrap code, loads the Absolute
-Loader, attaches `output.lda.ptap` to the paper tape reader, loads the
-program, and starts it.
+The `run.do` script takes an argument which is the full path to a file that contains the 
+contents of a paper tape that can be loaded by the Absolute Loader.  The script toggles in
+the bootstrap code, loads the Absolute Loader, attaches the file to the paper tape reader, and loads the
+program.  Control is returned to SimH, where you can attach a paper tape containing the
+puzzle data (`ATTACH PTR day-1.txt`), and issue the `GO` command to run the program, typically
+with `GO 1000`.
 
 These scripts assume the Absolute Loader program (`DEC-11-L2PC-PO.ptap`) and
 the PAL-11A assembler program (`DEC-11-ASXA-PB.ptap`) are in the current
