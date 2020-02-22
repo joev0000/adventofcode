@@ -1,0 +1,574 @@
+; ADVENT OF CODE 2019: DAY 2
+; 1202 PROGRAM ALARM
+;
+; THIS PROGRAM CAN BE ASSEMBLED BY PAL-11A AND CAN BE RUN ON ANY
+; PDP-11 SYSTEM WITH A HIGH-SPEED PAPER TAPE READER.
+;
+; INPUT:  PAPER TAPE
+; OUTPUT: TTY
+;
+; START ADDRESS: 1000
+;
+
+;
+; SET UP REGISTER AND DEVICE LABELS
+;
+        R0=     %0              ; REGISTER 0
+        R1=     %1              ; REGISTER 1
+        R2=     %2              ; REGISTER 2
+        R3=     %3              ; REGISTER 3
+        R4=     %4              ; REGISTER 4
+        R5=     %5              ; REGISTER 5
+        SP=     %6              ; STACK POINTER
+        PC=     %7              ; PROGRAM COUNTER
+        PRS=    177550          ; HIGH SPEED PAPER TAPE READER STATUS
+        PRB=    177552          ; HIGH SPEED PAPER TAPE READER BUFFER
+        TPS=    177564          ; TELEPRINTER STATUS WORD
+        TPB=    177566          ; TELEPRINTER BUFFER
+
+        IC=     4000            ; INTCODE PROGRAM ADDRESS
+;
+; START OF PROGRAM
+;
+        .=      1000            ; ASSEMBLE AT ADDRESS 1000
+START:  MOV     #.,SP           ; SET UP STACK
+
+        MOV     #BANNER,-(SP)   ; PUSH BANNER POINTER
+        JSR     PC,PUTS         ; PUTS(BANNER)
+        TST     (SP)+           ; CLEAN UP STACK
+
+        MOV     #GETC,-(SP)     ; PUSH GETC
+        MOV     #IC,-(SP)       ; PUSH INTCODE START ADDRESS
+        JSR     PC,ICLOAD       ; ICLOAD(IC, GETC)
+        ADD     #4,SP           ; CLEAN UP STACK
+
+        MOV     #14,IC+6        ; PER INSTRUCTIONS, SET 1 TO 12(10)
+        MOV     #2,IC+12        ; PER INSTRUCTIONS, SET 2 TO 2
+
+        MOV     #IC,-(SP)       ; PUSH INTCODE START ADDRESS
+        JSR     PC,ICRUN        ; RUN INTCODE
+        CLR     (SP)+           ; CLEAN STACK
+
+        MOV     #PART1,-(SP)    ; PUSH "PART 1: "
+        JSR     PC,PUTS         ; PUTS("PART 1: ")
+        TST     (SP)+           ; CLEAN UP STACK
+
+        MOV     #PUTC,-(SP)     ; PUSH PUTC
+        MOV     IC+2,-(SP)      ; PUSH LO WORD OF PART 1
+        MOV     IC,-(SP)        ; PUSH HI WORD OF PART 1
+        JSR     PC,FU3210       ; OUTPUT THE PART 1 SOLUTION
+        ADD     #6,SP           ; CLEAN UP STACK
+
+        MOV     #CRLF,-(SP)     ; PUSH CRLF
+        JSR     PC,PUTS         ; PRINT IT
+        CLR     (SP)+           ; CLEAN UP STACK
+
+        HALT                    ; PROGRAM COMPLETE
+        BR      START           ; RESTART ON CONTINUE
+
+;
+; ICLOAD(ADDRESS, IN) -> R0: END ADDRESS
+;
+; LOAD INTCODE INTO MEMORY AT THE GIVEN ADDRESS, USING THE IN ROUTINE
+;
+ICLOAD:
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     10(SP),R3       ; R3 <- ADDRESS
+        MOV     12(SP),R2       ; R2 <- IN
+ICL0:
+        MOV     R2,-(SP)        ; PUSH IN
+        JSR     PC,P10U32       ; P10U32(IN)
+        BCS     ICL1            ; IF CARRY SET, DONE
+        TST     (SP)+           ; CLEAN UP STACK
+        MOV     R0,(R3)+        ; STORE VALUE HI
+        MOV     R1,(R3)+        ; STORE VALUE LO
+        BR      ICL0            ; NEXT VALUE
+
+ICL1:   TST     (SP)+           ; CLEAN UP STACK FROM LAST P10U32 CALL
+        MOV     R3,R0           ; RETURN THE ADDRESS AFTER THE INTCODE
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        MOV     (SP)+,R1        ; RESTORE R1
+        RTS     PC              ; RETURN TO CALLER
+
+
+;
+; ICGET(BASE, POS) -> R0: VALUE HI, R1: VALUE LO
+;
+; GET THE INTCODE VALUE AT THE GIVEN POSITION
+;
+ICGET:
+        MOV     R3,-(SP)        ; SAVE R3
+
+        MOV     6(SP),R3        ; R3 <- POS
+        ASL     R3              ; MULTIPLY BY FOUR
+        ASL     R3              ; TO GET THE ADDRESS OFFSET
+        ADD     4(SP),R3        ; ADD THE BASE ADDRESS
+        MOV     (R3),R0         ; R0 <- VALUE HI
+        MOV     2(R3),R1        ; R1 <- VALUE LO
+
+        MOV     (SP)+,R3        ; RESTORE R3
+        RTS     PC
+
+;
+; ICGETD(BASE, POS) -> R0: VALUE HI, R1: VALUE LO
+;
+; GET THE INTCODE VALUE AT THE POSITION AT THE GIVEN POSITION
+;
+ICGETD:
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+
+        MOV     6(SP),R2        ; R2 <- BASE
+        MOV     10(SP),R3       ; R3 <- POS
+
+        MOV     R3,-(SP)        ; PUSH POS
+        MOV     R2,-(SP)        ; PUSH BASE
+        JSR     PC,ICGET        ; GET THE VALUE AT POS
+        MOV     R1,2(SP)        ; CHANGE POS TO VALUE LO
+        JSR     PC,ICGET        ; GET THE VALUE AT POS
+        ADD     #4,SP           ; CLEAN UP STACK
+
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        RTS     PC
+
+;
+; ICSET(BASE, POS, HI, LO)
+;
+; SET THE INTCODE VALUE AT THE POSITION
+;
+ICSET:
+        MOV     R3,-(SP)        ; SAVE R3
+
+        MOV     6(SP),R3        ; R3 <- POS
+        ASL     R3              ; MULTIPLY BY FOUR
+        ASL     R3              ; TO GET THE ADDRESS OFFSET
+        ADD     4(SP),R3        ; ADD THE BASE ADDRESS
+        MOV     10(SP),(R3)     ; SET VALUE HI
+        MOV     12(SP),2(R3)    ; SET VALUE LO
+
+        MOV     (SP)+,R3        ; RESTORE R3
+        RTS     PC
+
+; ICSETD(BASE, POS, HI, LO)
+;
+; SET THE INTCODE VALUE AT THE POSITION AT THE GIVEN POSITION
+;
+ICSETD:
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+
+        MOV     6(SP),R2        ; R2 <- BASE
+        MOV     10(SP),R3       ; R3 <- POS
+
+        MOV     R3,-(SP)        ; PUSH POS
+        MOV     R2,-(SP)        ; PUSH BASE
+        JSR     PC,ICGET        ; GET THE VALUE AT POS
+        ADD     #4,SP           ; CLEAN UP STACK
+
+        MOV     14(SP),-(SP)    ; PUSH LO
+        MOV     14(SP),-(SP)    ; PUSH HI
+        MOV     R1,-(SP)        ; PUSH POS (LO PART OF ICGET VALUE)
+        MOV     R2,-(SP)        ; PUSH BASE
+        JSR     PC,ICSET        ; SET IT
+        ADD     #10,SP          ; CLEAN UP STACK
+
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        RTS     PC
+
+;
+; ICRUN(ADDRESS)
+;
+; RUN THE INTCODE PROGRAM AT THE GIVEN ADDRESS
+;
+ICRUN:
+        MOV     R0,-(SP)        ; SAVE R0
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     R4,-(SP)        ; SAVE R4
+        MOV     R5,-(SP)        ; SAVE R5
+
+        MOV     16(SP),R3       ; R3 <- BASE ADDRESS
+        CLR     R2              ; R2 <- INTCODE PC
+ICR0:
+        MOV     R2,-(SP)        ; PUSH POS
+        MOV     R3,-(SP)        ; PUSH BASE ADDRESS
+        JSR     PC,ICGET        ; GET THE VALUE AT POS
+        ADD     #4,SP           ; CLEAN UP STACK
+        INC     R2              ; INCREMENT PC
+        CMP     #1,R1           ; IS OPCODE 1 (ADD)?
+        BEQ     ICADD           ; DO ADD
+        CMP     #2,R1           ; IS OPCODE 2 (MUL)?
+        BEQ     ICMUL           ; DO MUL
+        CMP     #143,R1         ; IS OPCODE 99(10) (HALT)?
+        BEQ     ICHALT          ; DO HALT
+        HALT                    ; ILLEGAL OPCODE
+
+ICADD:
+        MOV     R2,-(SP)        ; PUSH POS
+        MOV     R3,-(SP)        ; PUSH BASE
+        JSR     PC,ICGETD       ; GET DEFERRED
+        ADD     #4,SP           ; CLEAN UP STACK
+        MOV     R1,R5           ; STASH LO
+        MOV     R0,R4           ; STASH HI
+        INC     R2              ; INCREMENT PC TO SECOND ARG
+        MOV     R2,-(SP)        ; PUSH POS
+        MOV     R3,-(SP)        ; PUSH BASE
+        JSR     PC,ICGETD       ; GET DEFERRED
+        ADD     #4,SP           ; CLEAN UP STACK
+        ADD     R1,R5           ; ADD VALUE LO
+        ADC     R0              ; ADD CARRY TO HI
+        ADD     R0,R4           ; ADD VALUE HI
+        INC     R2              ; INCREMENT PC TO DESTINATION ARG
+        MOV     R5,-(SP)        ; PUSH LO
+        MOV     R4,-(SP)        ; PUSH HI
+        MOV     R2,-(SP)        ; PUSH POS
+        MOV     R3,-(SP)        ; PUSH BASE
+        JSR     PC,ICSETD       ; SET DEFERRED
+        ADD     #10,SP          ; CLEAN UP STACK
+        INC     R2              ; INCREMENT PC TO NEXT INSTRUCTION
+        BR      ICR0            ; NEXT INSTRUCTION
+
+ICMUL:
+        ; USE A PARTIAL MULTIPLY: TAKE LOWER 32 BITS
+        ; OF A 32 BIT TIMES 32 BIT VALUE:
+        ;
+        MOV     R2,-(SP)        ; PUSH POS
+        MOV     R3,-(SP)        ; PUSH BASE
+        JSR     PC,ICGETD       ; GET DEFERRED
+        ADD     #4,SP           ; CLEAN UP STACK
+        MOV     R1,R5           ; STASH LO
+        MOV     R0,R4           ; STASH HI
+        INC     R2              ; INCREMENT PC TO SECOND ARG
+        MOV     R2,-(SP)        ; PUSH POS
+        MOV     R3,-(SP)        ; PUSH BASE
+        JSR     PC,ICGETD       ; GET DEFERRED
+        ADD     #4,SP           ; CLEAN UP STACK
+
+        MOV     R5,-(SP)        ; PUSH MULTIPLIER LO
+        MOV     R4,-(SP)        ; PUSH MULTIPLIER HI
+        MOV     R1,-(SP)        ; PUSH MULTIPLICAND LO
+        MOV     R0,-(SP)        ; PUSH MULTIPLICAND HI
+        JSR     PC,MUL32P       ; PARTIAL MULTIPLY
+        ADD     #10,SP          ; CLEAN UP STACK
+
+        INC     R2              ; INCREMENT PC TO DESTINATION ARG
+        MOV     R1,-(SP)        ; PUSH LO
+        MOV     R0,-(SP)        ; PUSH HI
+        MOV     R2,-(SP)        ; PUSH POS
+        MOV     R3,-(SP)        ; PUSH BASE
+        JSR     PC,ICSETD       ; SET DEFERRED
+        ADD     #10,SP          ; CLEAN UP STACK
+        INC     R2              ; INCREMENT PC TO NEXT INSTRUCTION
+        BR      ICR0            ; NEXT INSTRUCTION
+
+ICHALT:
+        MOV     (SP)+,R5        ; RESTORE R5
+        MOV     (SP)+,R4        ; RESTORE R4
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        MOV     (SP)+,R1        ; RESTORE R1
+        MOV     (SP)+,R0        ; RESTORE R0
+
+        RTS     PC
+
+;
+; STATIC DATA
+;
+BANNER: .ASCII  "ADVENT OF CODE 2019 DAY 2"
+CRLF:   .BYTE   15,12,0         ; CR,LF
+PART1:  .ASCII  "PART 1: "
+        .BYTE   0
+PART2:  .ASCII  "PART 2: "
+        .BYTE   0
+
+;
+; LIBRARY CODE
+;
+; TODO: THIS CAN MOVE TO ITS OWN MODULE WHEN WE START TO USE PAL-11S
+;       FOR NOW, IT IS COPIED INTO EACH PROGRAM
+;
+
+        .EVEN
+;
+; PUTC(CHAR)
+;
+; WRITE A CHARACTER TO TELEPRINTER USING PROGRAMMED I/O
+;
+PUTC:   MOV     R0,-(SP)        ; SAVE R0
+        MOV     4(SP),R0        ; R0 <- CHAR
+PC1:    TSTB    TPS             ; IS THE TTY READY?
+        BPL     PC1             ; IF NOT, TRY AGAIN
+        MOVB    R0,TPB          ; WRITE BYTE TO TTY, INC PTR
+        MOV     (SP)+,R0        ; RESTORE R0
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; PUTS(BUFFER)
+;
+; WRITE NULL-TERMINATED STRING TO TELEPRINTER
+; USING PROGRAMMED I/O
+;
+PUTS:   MOV     R0,-(SP)        ; SAVE R0
+        MOV     4(SP),R0        ; R0 <- BUFFER
+PS0:    TSTB    @R0             ; IS THE BYTE ZERO?
+        BEQ     PS2             ; YES, DONE
+PS1:    TSTB    TPS             ; IS THE TTY READY?
+        BPL     PS1             ; IF NOT, TRY AGAIN
+        MOVB    (R0)+,TPB       ; WRITE BYTE TO TTY, INC PTR
+        BR      PS0             ; CONTINUE
+PS2:    MOV     (SP)+,R0        ; RESTORE R0
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; GETC() -> R0L: THE BYTE READ.  SETS CARRY ON ERROR.
+;
+; GET A BYTE FROM THE HIGH SPEED PAPER TAPE
+GETC: INC PRS                   ; SET PRS ENABLE
+GC1:  BIT       #100200,PRS     ; IS BYTE AVAILABLE OR ERROR?
+      BEQ       GC1             ; IF NOT, KEEP TRYING
+      BMI       GC2             ; IF ERROR, DONE
+      MOVB      PRB,R0          ; PUT BYTE INTO R0
+      CLC                       ; CLEAR CARRY (ERROR) FLAG
+      RTS       PC              ; RETURN TO CALLER
+GC2:  SEC                       ; SET CARRY (ERROR) FLAG
+      RTS       PC              ; RETURN TO CALLER
+
+
+;
+; FU3210(VALUE HI, VALUE LO, OUT)
+;
+; FORAMT AN UNSIGNED DOUBLE WORD TO DECIMAL, CALLING THE OUT SUBROUTINE
+; FOR EACH DIGIT.
+;
+FU3210:
+        MOV     R0,-(SP)        ; SAVE R0
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     R4,-(SP)        ; SAVE R4
+
+        SUB     #10,SP          ; SPACE FOR RESULT
+        SUB     #12,SP          ; SPACE FOR OUTPUT BUFFER
+
+        MOV     36(SP),R0       ; R0 <- VALUE HI
+        MOV     40(SP),R1       ; R1 <- VALUE LO
+        MOV     SP,R2           ; R2 <- RESULT ADDRESS
+        ADD     #12,R2          ;    "
+        MOV     SP,R3           ; R3 <- BUFFER
+        CLR     R4              ; R4 <- COUNTER
+
+FF1:    MOV     R2,-(SP)        ; PUSH RESULT ADDRESS
+        MOV     #12,-(SP)       ; PUSH DIVISOR LO 10(10)
+        CLR     -(SP)           ; PUSH DIVISOR HI  0
+        MOV     R1,-(SP)        ; PUSH DIVIDEND LO
+        MOV     R0,-(SP)        ; PUSH DIVIDEND HI
+        JSR     PC,DIVU32       ; DIVIDE
+        ADD     #12,SP          ; CLEAN UP STACK
+        MOV     12(SP),R0       ; STORE QUOTIENT HI IN R0
+        MOV     14(SP),R1       ; STORE QUOTIENT LO IN R1
+
+        ADD     #60,20(SP)      ; CONVERT REMAINDER TO DECIMAL DIGIT
+        MOVB    20(SP),(R3)+    ; PUSH CHARACTER TO BUFFER
+        INC     R4              ; INCREMENT COUNTER
+        TST     R1              ; IS QUOTIENT LO ZERO?
+        BNE     FF1             ; NO, REPEAT
+        TST     R0              ; IS QUOTIENT HI ZERO?
+        BNE     FF1             ; NO, REPEAT
+
+FF2:
+        MOVB    -(R3),-(SP)     ; PUSH CHAR
+        JSR     PC,@44(SP)      ; OUTPUT FIRST DIGIT
+        TST     (SP)+           ; POP CHAR OFF STACK
+        DEC     R4              ; DECREMENT COUNTER
+        BNE     FF2             ; IF NOT DONE, NEXT CHAR
+
+        ADD     #12,SP          ; RELENQUISH BUFFER SPACE
+        ADD     #10,SP          ; RELENQUISH RESULT SPACE
+        MOV     (SP)+,R4        ; RESTORE R4
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        MOV     (SP)+,R1        ; RESTORE R1
+        MOV     (SP)+,R0        ; RESTORE R0
+        RTS     PC              ; RETURN TO CALLER
+
+; P10U32(IN) -> R0: HI, R1: LO
+;
+; PARSE A 32 BIT VALUE FROM DECIMAL STRING, USING THE IN SUBROUTINE.
+; CONSUMES THE FIRST NON-DECIMAL-DIGIT AFTER THE NUMBER
+P10U32: MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     R4,-(SP)        ; SAVE R4
+        MOV     R5,-(SP)        ; SAVE R5
+        MOV     12(SP),R5       ; R5 <- IN
+
+        CLR     R0              ; CLEAR R0
+        CLR     R1              ; CLEAR R1
+        CLR     R2              ; CLEAR HI RESULT
+        CLR     R3              ; CLEAR LO RESULT
+
+P101:   JSR     PC,(R5)         ; CALL IN SUBRUTINE
+        MOV     R0,R4           ; STASH BYTE IN R4
+        BCS     P102            ; IF ERROR, DONE
+        CMP     R0,#60          ; IS IT LESS THAN '0'?
+        BMI     P103            ;   YES, DONE
+        CMP     #71,R0          ; IS IT GREATER THAN '9'?
+        BMI     P103            ;   YES, DONE
+        SUB     #60,R4          ; CONVERT ASCII TO INT
+
+        ; THIS SECTION IMPLEMENTS R2R3 = R2R3 * 10D + R4
+        MOV     R4,-(SP)        ; STASH THE NEW DIGIT
+        MOV     R3,-(SP)        ; PUSH LO RESULT
+        MOV     #12,-(SP)       ; PUSH 10D
+        JSR     PC,MULU16       ; MULU16(LO,10D) -> R0R1
+        ADD     #4,SP           ; CLEAN UP STACK
+        MOV     R1,R3           ; LO RESULT = LO(LO* 10D)
+        MOV     R0,R4           ; CARRY = HI(LO * 10D)
+
+        MOV     R2,-(SP)        ; PUSH HI RESULT
+        MOV     #12,-(SP)       ; PUSH 10D
+        JSR     PC,MULU16       ; MULU16(HI,10D) -> R0R1
+        ADD     #4,SP           ; CLEAN UP STACK
+        MOV     R1,R2           ; HI RESULT = LO(HI * 10D)
+        ADD     R4,R2           ; HI RESULT += CARRY
+
+        MOV     (SP)+,R4        ; RESTORE NEW DIGIT TO R4
+        ADD     R4,R3           ; ADD IT TO LO RESULT
+        ADC     R2              ; ADD ANY CARRY TO HI (PROB. NOT USED)
+
+        BR      P101            ; NEXT DIGIT
+
+P103:   CLC                     ; CLEAR ERROR INDICATOR
+P102:   MOV     R2,R0           ; HI RESULT <- R2
+        MOV     R3,R1           ; LO RESULT <- R3
+        MOV     (SP)+,R5        ; RESTORE R5
+        MOV     (SP)+,R4        ; RESTORE R4
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        RTS     PC              ; RETURN TO CALLER
+
+;
+;
+; MULU16(MULTIPLICAND, MULTIPLIER) -> R0: HI, R1: LO
+;
+; UNSIGNED 16-BIT MULTIPLICATION
+;
+
+MULU16: CLR     R0              ; CLEAR RESULT HI
+        CLR     R1              ; CLEAR RESULT LO
+
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     R4,-(SP)        ; SAVE R4
+        MOV     10(SP),R2       ; R2 <- MULTIPLICAND
+        MOV     12(SP),R3       ; R3 <- MULTIPLIER
+        MOV     #20,R4          ; R4 <- COUNTER (16D)
+
+M0:     ASL     R1              ; ROTATE LO RESULT LEFT
+        ROL     R0              ;    AND HI
+        ROL     R3              ; ROTATE MULTIPLIER LEFT
+        BCC     M1              ; IF THE MSB WAS CLEAR, SKIP ADD
+        ADD     R2,R1           ; ADD MULTIPLICAND TO LO RESULT
+        ADC     R0              ;   AND HI
+M1:     DEC     R4              ; DECREMENT THE COUNTER
+        BNE     M0              ; IF NOT ZERO, REPEAT
+
+        MOV     (SP)+,R4        ; RESTORE R4
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; MUL32P(M'CAND HI, M'CAND LO, MULTIPLIER HI, MULTIPLIER LO) ->
+;   R0: HI(LO(PRODUCT)), R1: LO(LO(PRODUCT))
+;
+; RETURN LOW 32 BITS OF A 32 BIT TIMES 32 BIT PARTIAL PRODUCT
+;
+; R1 = LO(LO(A) * LO(B))
+; R0 = HI(LO(A) * LO(B)) + LO(LO(A) * HI(B)) + LO (HI(A) * LO(B))
+MUL32P:
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+
+        MOV    10(SP),-(SP)     ; PUSH LO(A): MULTIPLICAND LO
+        MOV    16(SP),-(SP)     ; PUSH LO(B): MULTIPLIER LO
+        JSR    PC,MULU16        ; MULTIPLY LO(A) * LO(B)
+        MOV    R1,R3            ; R3 <- LO(LO(A) * LO(B))
+        MOV    R0,R2            ; R2 <- HI(LO(A) * LO(B))
+
+        MOV    16(SP),(SP)      ; HI(B): MULTIPLIER HI
+        JSR    PC,MULU16        ; MULTIPLY LO(A) * HI(B)
+        ADD    R1,R2            ; R2 += LO(LO(A) * HI(B))
+
+        MOV    12(SP),(SP)      ; HI(A): MULTIPLICAND HI
+        MOV    20(SP),2(SP)     ; LO(B): MULTIPLIER LO
+        JSR    PC,MULU16        ; MULTIPLY HI(A) * LO(B)
+        ADD    R1,R2            ; R2 += LO(HI(A) * LO(B))
+        ADD    #4,SP            ; CLEAN UP STACK
+
+        MOV    R2,R0            ; RESULT HI
+        MOV    R3,R1            ; RESULT LO
+
+        MOV    (SP)+,R3         ; RESTORE R3
+        MOV    (SP)+,R2         ; RESTORE R2
+        RTS    PC               ; RETURN TO CALLER
+
+; DIVU32(DIVIDEND HI, DIVIDEND LO, DIVISOR HI, DIVISOR LO, RESULT)
+; (RESULT) -> QUOTIENT HI, QUOTIENT LO, REMAINDER HI, REMAINDER LO
+;
+; UNSIGNED 32-BIT DIVISION
+;
+DIVU32:
+        TST     10(SP)          ; CHECK DIVISOR LO
+        BNE     DA1             ; IF NOT ZERO, CONTINUE
+        TST     6(SP)           ; CHECK DIVISOR HI
+        BNE     DA1             ; IF NOT ZERO, CONTINUE
+        SEV                     ; SET OVERFLOW (ERROR)
+        RTS     PC              ; RETURN TO CALLER
+DA1:
+        MOV     R0,-(SP)        ; SAVE R0
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     R4,-(SP)        ; SAVE R4
+
+        MOV     22(SP),R0       ; R0 <- RESULT
+        MOV     12(SP),R2       ; R2 <- DIVIDEND HI
+        MOV     14(SP),R3       ; R3 <- DIVIDEND LO
+        MOV     #40,R4          ; R4 <- COUNTER
+        CLR     (R0)            ; CLEAR QUOTIENT HI
+        CLR     2(R0)           ; CLEAR QOUTIENT LO
+        CLR     4(R0)           ; CLEAR REMAINDER HI
+        CLR     6(R0)           ; CLEAR REMAINDER LO
+DA2:
+        ASL     2(R0)           ; SHIFT QUOTIENT LO LEFT
+        ROL     (R0)            ; ROTATE QUOTIENT HI LEFT WITH CARRY
+        ASL     R3              ; SHIFT DIVIDEND LO LEFT
+        ROL     R2              ; ROTATE DIVIDEND HI LEFT WITH CARRY
+        ROL     6(R0)           ; ROTATE REMAINDER LO LEFT WITH CARRY
+        ROL     4(R0)           ; ROTATE REMAINDER HI LEFT WITH CARRY
+        CMP     4(R0),16(SP)    ; COMPARE REMAINDER HI AND DIVISOR HI
+        BMI     DA3             ; IF DIVISOR HI > REMAINDER HI, CONT
+        BNE     DA4
+        CMP     6(R0),20(SP)    ; COMPARE REMAINDER LO AND DIVISOR LO
+        BMI     DA3             ; IF DIVISOR LO > REMAINDER LO, CONT
+DA4:    SUB     20(SP),6(R0)    ; REMAINDER LO -= DIVISOR LO
+        SBC     4(R0)           ; SUBTRACT CARRY FROM DIVISOR HI
+        SUB     16(SP),4(R0)    ; REMAINDER HI -= DIVISOR HI
+        BIS     #1,2(R0)        ; SET LOW BIT IN QUOTIENT
+DA3:
+        DEC     R4              ; DECREMENT COUNTER
+        BNE     DA2             ; IF NOT ZERO, REPEAT
+
+        MOV     (SP)+,R4        ; RESTORE R4
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        MOV     (SP)+,R0        ; RESTORE R0
+        CLV                     ; CLEAR ERROR FLAG
+        RTS     PC              ; RETURN TO CALLER
+
+        .END
