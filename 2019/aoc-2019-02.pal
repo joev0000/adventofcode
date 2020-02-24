@@ -27,11 +27,14 @@
         TPB=    177566          ; TELEPRINTER BUFFER
 
         IC=     4000            ; INTCODE PROGRAM ADDRESS
+        ICCOPY= 6000            ; INTCODE PROGRAM COPY ADDRESS
 ;
 ; START OF PROGRAM
 ;
         .=      1000            ; ASSEMBLE AT ADDRESS 1000
 START:  MOV     #.,SP           ; SET UP STACK
+        SUB     #2,SP           ; LOCAL VARS:
+                                ;   0(SP): END OF IC
 
         MOV     #BANNER,-(SP)   ; PUSH BANNER POINTER
         JSR     PC,PUTS         ; PUTS(BANNER)
@@ -41,11 +44,18 @@ START:  MOV     #.,SP           ; SET UP STACK
         MOV     #IC,-(SP)       ; PUSH INTCODE START ADDRESS
         JSR     PC,ICLOAD       ; ICLOAD(IC, GETC)
         ADD     #4,SP           ; CLEAN UP STACK
+        MOV     R0,(SP)         ; STORE END OF PROGRAM ADDRESS
 
-        MOV     #14,IC+6        ; PER INSTRUCTIONS, SET 1 TO 12(10)
-        MOV     #2,IC+12        ; PER INSTRUCTIONS, SET 2 TO 2
+        MOV     #ICCOPY,-(SP)   ; PUSH DESTINATION
+        MOV     2(SP),-(SP)     ; PUSH END
+        MOV     #IC,-(SP)       ; PUSH START
+        JSR     PC,COPY         ; COPY
+        ADD     #6,SP           ; CLEAN UP STACK
 
-        MOV     #IC,-(SP)       ; PUSH INTCODE START ADDRESS
+        MOV     #14,ICCOPY+6    ; PER INSTRUCTIONS, SET 1 TO 12(10)
+        MOV     #2,ICCOPY+12    ; PER INSTRUCTIONS, SET 2 TO 2
+
+        MOV     #ICCOPY,-(SP)   ; PUSH INTCODE START ADDRESS
         JSR     PC,ICRUN        ; RUN INTCODE
         CLR     (SP)+           ; CLEAN STACK
 
@@ -54,8 +64,8 @@ START:  MOV     #.,SP           ; SET UP STACK
         TST     (SP)+           ; CLEAN UP STACK
 
         MOV     #PUTC,-(SP)     ; PUSH PUTC
-        MOV     IC+2,-(SP)      ; PUSH LO WORD OF PART 1
-        MOV     IC,-(SP)        ; PUSH HI WORD OF PART 1
+        MOV     ICCOPY+2,-(SP)  ; PUSH LO WORD OF PART 1
+        MOV     ICCOPY,-(SP)    ; PUSH HI WORD OF PART 1
         JSR     PC,FU3210       ; OUTPUT THE PART 1 SOLUTION
         ADD     #6,SP           ; CLEAN UP STACK
 
@@ -63,6 +73,57 @@ START:  MOV     #.,SP           ; SET UP STACK
         JSR     PC,PUTS         ; PRINT IT
         CLR     (SP)+           ; CLEAN UP STACK
 
+        CLR     R1              ; R1 <- NOUN
+        CLR     R2              ; R2 <- VERB
+
+S0:     MOV     #ICCOPY,-(SP)   ; PUSH DESTINATION
+        MOV     2(SP),-(SP)     ; PUSH END
+        MOV     #IC,-(SP)       ; PUSH START
+        JSR     PC,COPY         ; COPY
+        ADD     #6,SP           ; CLEAN UP STACK
+
+        MOV     R1,ICCOPY+6     ; PER INSTRUCTIONS, SET 1 TO 12(10)
+        MOV     R2,ICCOPY+12    ; PER INSTRUCTIONS, SET 2 TO 2
+
+        MOV     #ICCOPY,-(SP)   ; PUSH INTCODE START ADDRESS
+        JSR     PC,ICRUN        ; RUN INTCODE
+        CLR     (SP)+           ; CLEAN STACK
+
+        CMP     #000454,ICCOPY  ; IS HI WORD HI(19690720(10))?
+        BNE     S1
+        CMP     #072340,ICCOPY+2; IS LO WORD LO(19690720(10))?
+        BEQ     S2
+S1:
+        INC     R1              ; INCREMENT NOUN
+        CMP     #144,R1         ; IS IT 100(10)?
+        BNE     S0              ; IF NOT, NEXT
+        CLR     R1              ; IF SO, NOUN <- 0
+        INC     R2              ; INCREMENT VERB
+        CMP     #144,R2         ; IS IT 100(10)?
+        BNE     S0              ; IF NOT, NEXT
+        HALT                    ; DIDN'T FIND OUR VALUE, GIVE UP
+S2:
+        MOV     R1,-(SP)        ; PUSH NOUN
+        MOV     #144,-(SP)      ; PUSH 100(10)
+        JSR     PC,MULU16       ; MULTIPLY
+        ADD     #4,SP           ; CLEAN STACK
+        ADD     R2,R1           ; ADD VERB, NOW R1 IS OUR SOLUTION
+
+        MOV     #PART2,-(SP)    ; PUSH "PART 2: "
+        JSR     PC,PUTS         ; PUTS("PART 2: ")
+        TST     (SP)+           ; CLEAN UP STACK
+
+        MOV     #PUTC,-(SP)     ; PUSH PUTC
+        MOV     R1,-(SP)        ; PUSH LO WORD OF PART 2
+        CLR     -(SP)           ; PUSH HI WORD (0) OF PART 1
+        JSR     PC,FU3210       ; OUTPUT THE PART 1 SOLUTION
+        ADD     #6,SP           ; CLEAN UP STACK
+
+        MOV     #CRLF,-(SP)     ; PUSH CRLF
+        JSR     PC,PUTS         ; PRINT IT
+        CLR     (SP)+           ; CLEAN UP STACK
+
+        ADD     #2,SP           ; DEALLOCATE LOCALS
         HALT                    ; PROGRAM COMPLETE
         BR      START           ; RESTART ON CONTINUE
 
@@ -569,6 +630,30 @@ DA3:
         MOV     (SP)+,R2        ; RESTORE R2
         MOV     (SP)+,R0        ; RESTORE R0
         CLV                     ; CLEAR ERROR FLAG
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; COPY(START,END,DEST)
+;
+; COPY MEMORY FROM START TO END TO DEST
+;
+COPY:
+        MOV     R0,-(SP)        ; SAVE R0
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     R2,-(SP)        ; SAVE R2
+
+        MOV     10(SP),R0       ; R0 <- START
+        MOV     12(SP),R1       ; R1 <- END
+        MOV     14(SP),R2       ; R2 <- DEST
+
+C0:     CMP     R0,R1           ; ARE WE DONE
+        BEQ     C1              ; IF SO, SKIP
+        MOV     (R0)+,(R2)+     ; COPY WORD TO DEST
+        BR      C0              ; NEXT
+C1:
+        MOV     (SP)+,R2        ; RESTORE R2
+        MOV     (SP)+,R1        ; RESTORE R1
+        MOV     (SP)+,R0        ; RESTORE R0
         RTS     PC              ; RETURN TO CALLER
 
         .END
