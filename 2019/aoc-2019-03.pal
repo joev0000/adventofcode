@@ -1,0 +1,39 @@
+; ADVENT OF CODE: DAY 3
+; CROSSED WIRES
+
+; THIS PROGRAM CAN BE ASSEMBLED BY PAL-11A AND CAN BE RUN ON ANY
+; PDP-11 SYSTEM WITH A HIGH-SPEED PAPER TAPE READER.
+;
+; INPUT:  PAPER TAPE
+; OUTPUT: TTY
+;
+; START ADDRESS: 1000
+;
+
+;
+; SET UP REGISTER AND DEVICE LABELS
+;
+        R0=     %0              ; REGISTER 0
+        R1=     %1              ; REGISTER 1
+        R2=     %2              ; REGISTER 2
+        R3=     %3              ; REGISTER 3
+        R4=     %4              ; REGISTER 4
+        R5=     %5              ; REGISTER 5
+        SP=     %6              ; STACK POINTER
+        PC=     %7              ; PROGRAM COUNTER
+        PRS=    177550          ; HIGH SPEED PAPER TAPE READER STATUS
+        PRB=    177552          ; HIGH SPEED PAPER TAPE READER BUFFER
+        TPS=    177564          ; TELEPRINTER STATUS WORD
+        TPB=    177566          ; TELEPRINTER BUFFER
+
+
+;
+; START OF PROGRAM
+;
+        .=      1000            ; ASSEMBLE AT ADDRESS 1000
+START:  MOV     #.,SP           ; SET UP STACK
+
+        HALT                    ; PROGRAM COMPLETE
+        BR      START           ; RESTART ON CONTINUE
+
+        .END
