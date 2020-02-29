@@ -33,6 +33,11 @@
         .=      1000            ; ASSEMBLE AT ADDRESS 1000
 START:  MOV     #.,SP           ; SET UP STACK
 
+        MOV     #GETC,-(SP)     ; PUSH GETC
+        MOV     #PATH1,-(SP)    ; PUSH PATH1
+        JSR     PC,PARSE        ; PARSE THE PATH
+        ADD     #4,SP           ; CLEAN UP STACK
+
         HALT                    ; PROGRAM COMPLETE
         BR      START           ; RESTART ON CONTINUE
 
@@ -44,62 +49,66 @@ START:  MOV     #.,SP           ; SET UP STACK
 ; DATA IS STORED AS A SERIES OF X AND Y VALUES.
 ; EXAMPLE: R75,D30,R83,U83,L12 IS STORED AS 75,-30,158,53,146 (10).
 PARSE:
+        ; clr (addr)+
+        ; a <- getc
+        ; if a = 'U' or 'D', clr(addr)+
+        ; br l0
+        ; l1: a <- getc
+        ; l0: p32u10
+        ; if a = 'L' or 'D', a = -a
+        ; (addr) = -2(addr) + a
+        ; inc addr
+        ; br l1;
         MOV     R2,-(SP)        ; SAVE R2
         MOV     R3,-(SP)        ; SAVE R3
         MOV     R4,-(SP)        ; SAVE R4
-        MOV     R5,-(SP)        ; SAVE R5
-        MOV     12(SP),R5       ; R5 <- IN SUBROUTINE
-        MOV     10(SP),R4       ; R4 <- ADDRESS
-        CLR     R2              ; R3 <- LAST LOCATION VALUE
-        MOV     #4,R2           ; R2 <- FLAGS
-                                ;       BIT 0: NEGATIVE
-                                ;       BIT 1: VERTICAL
-                                ;       BIT 2: FIRST COORDINATE
 
-P0:     JSR     PC,(R5)         ; CALL IN ROUTINE
-        BCS     P1              ; IF ERROR, DONE
-        TST     R0              ; CHECK RETURNED BYTE
-        BEQ     P0              ; SKIP NUL BYTES
-        CMP     #122,R0         ; IS IT 'R'?
-        BNE     PNR             ; NO, SKIP
-        BIC     #3,R2           ; CLEAR THE NEGATIVE AND VERTICAL FLAGS
-        BR      P2              ; CONTINUE PARSING
-PNR:    CMP     #125,R0         ; IS IT 'U'?
-        BNE     PNU             ; NO, SKIP
-        BIC     #1,R2           ; CLEAR THE NEGATIVE FLAG
-        BIS     #2,R2           ; SET THE VERTICAL FLAG
-        BR      P2              ; CONTINUE PARSING
-PNU:    CMP     #114,R0         ; IS IT 'L'?
-        BNE     PNL             ; NO, SKIP
-        BIS     #1,R2           ; SET THE NEGATIVE FLAG
-        BIC     #2,R2           ; CLEAR THE VERTICAL FLAG
-        BR      P2              ; CONTINUE PARSING
-PNL:    CMP     #104,R0         ; IS IT 'D'?
-        BNE     PERROR          ; NO, HALT
-        BIS     #3,R2           ; SET THE NEGATIVE AND VERTICAL FLAGS
-        BR      P2              ; CONTINUE PARSING
-PERROR: HALT                    ; BAD INPUT, HALT.
+        MOV     10(SP),R2       ; R2 <- ADDRESS
+        MOV     12(SP),R3       ; R3 <- IN
 
-P2:     BIT     #5,R2           ; IS THIS THE 1ST COORDINATE AND VERT?
-        BNE     P4              ; IF NOT, CONTINUE
-        CLR     (R4)+           ; IF SO, THE FIRST X IS ZERO
-P4:     MOV     R5,-(SP)        ; PUSH IN SUBROUTINE
-        JSR     PC,P10U32       ; PARSE DIGITS
+        CLR     (R2)+           ; CLEAR THE FIRST COORDINATE
+        JSR     PC,(R3)         ; GET FIRST CHAR
+        CMP     #'U,R0          ; IS IT U?
+        BEQ     PDU1            ; YES, HANDLE VERTICAL FIRST
+        CMP     #'D,R0          ; IS IT D?
+        BEQ     PDU1            ; YES, HANDLE VERITICAL FIRST
+        BR      P1              ; NO, CONTINUE
+PDU1:   CLR     (R2)+           ; FIRST HORIZONTAL IS ZERO
+
+P0:
+        JSR     PC,(R3)         ; GET CHAR
+P1:
+        CMP     #'D,R0          ; IS IT D?
+        BEQ     PDL             ; YES, NEGATE
+        CMP     #'L,R0          ; IS IT L?
+        BEQ     PDL             ; YES, NEGATE
+        BIC     #1,R4           ; CLEAR NEGATE FLAG
+        BR      PNN             ; SKIP, NOT NEGATIVE
+PDL:    BIS     #1,R4           ; SET NEGATE FLAG
+
+PNN:
+        MOV     R3,-(SP)        ; PUSH IN
+        JSR     PC,P10U32       ; PARSE NUMBER
         CLR     (SP)+           ; CLEAN UP STACK
-        BIT     #1,R2           ; IS VALUE NEGATIVE?
-        BNE     P3              ; NO, DON'T NEGATE
-        NEG     R1              ; NEGATE VALUE
-P3:
-        ; TODO: ADD THE PREVIOUS X OR Y COORINATE.
-        MOV     R1,(R4)+        ; STORE COORDINATE
-        BIC     #4,R2           ; CLEAR THE FIRST COORDINATE FLAG
-        BR      P0              ; NEXT VALUE
+        ; TODO: CHECK TO SEE IF CLR AFFECTS CARRY
+        ; TODO: WILL P10U32 SKIP OVER THE NEWLINE?
+        BCS     PDONE           ; IF WE'RE DONE, FINISH UP
+        BIT     #1,R4           ; CHECK THE NEGATE FLAG
+        BNE     P2              ; IF NOT SKIP, DON'T NEGATE
+        NEG     R1              ; NEGATE
+P2:
+        MOV     -4(R2),(R2)     ; MOVE PREVIOUS VALUE INTO NEW VALUE
+        ADD     R1,(R2)+        ; ADD PARSED VALUE TO NEW VALUE
+        BR      P0              ; MOVE TO NEXT VALUE
 
-P1:     MOV     (SP)+,R5        ; RESTORE R5
+PDONE:
+        MOV     R2,R0           ; RETURN END ADDRESS
         MOV     (SP)+,R4        ; RESTORE R4
         MOV     (SP)+,R3        ; RESTORE R3
         MOV     (SP)+,R2        ; RESTORE R2
         RTS     PC              ; RETURN TO CALLER
+PATH1:
+        .=.+1000
 
 ;
 ; LIBRARY CODE
