@@ -94,7 +94,7 @@ PNN:
         ; TODO: WILL P10U32 SKIP OVER THE NEWLINE?
         BCS     PDONE           ; IF WE'RE DONE, FINISH UP
         BIT     #1,R4           ; CHECK THE NEGATE FLAG
-        BNE     P2              ; IF NOT SKIP, DON'T NEGATE
+        BEQ     P2              ; IF NOT SKIP, DON'T NEGATE
         NEG     R1              ; NEGATE
 P2:
         MOV     -4(R2),(R2)     ; MOVE PREVIOUS VALUE INTO NEW VALUE
