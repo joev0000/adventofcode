@@ -26,8 +26,6 @@
         TPS=    177564          ; TELEPRINTER STATUS WORD
         TPB=    177566          ; TELEPRINTER BUFFER
 
-        IC=     4000            ; INTCODE PROGRAM ADDRESS
-        ICCOPY= 6000            ; INTCODE PROGRAM COPY ADDRESS
 ;
 ; START OF PROGRAM
 ;
@@ -36,13 +34,14 @@ START:  MOV     #.,SP           ; SET UP STACK
         SUB     #2,SP           ; LOCAL VARS:
                                 ;   0(SP): END OF IC
 
-        MOV     #BANNER,-(SP)   ; PUSH BANNER POINTER
-        JSR     PC,PUTS         ; PUTS(BANNER)
-        TST     (SP)+           ; CLEAN UP STACK
+        MOV     #STDOUT,-(SP)   ; STREAM = STDOUT
+        MOV     #BANNER,-(SP)   ; S = BANNER
+        JSR     PC,FPUTS         ; FPUTS(S, STDOUT)
+        ADD     #4,SP           ; CLEAN UP STACK
 
-        MOV     #GETC,-(SP)     ; PUSH GETC
+        MOV     #PTGETC,-(SP)   ; PUSH PTGETC
         MOV     #IC,-(SP)       ; PUSH INTCODE START ADDRESS
-        JSR     PC,ICLOAD       ; ICLOAD(IC, GETC)
+        JSR     PC,ICLOAD       ; ICLOAD(IC, PTGETC)
         ADD     #4,SP           ; CLEAN UP STACK
         MOV     R0,(SP)         ; STORE END OF PROGRAM ADDRESS
 
@@ -59,19 +58,21 @@ START:  MOV     #.,SP           ; SET UP STACK
         JSR     PC,ICRUN        ; RUN INTCODE
         CLR     (SP)+           ; CLEAN STACK
 
-        MOV     #PART1,-(SP)    ; PUSH "PART 1: "
-        JSR     PC,PUTS         ; PUTS("PART 1: ")
-        TST     (SP)+           ; CLEAN UP STACK
+        MOV     #STDOUT,-(SP)   ; STREAM = STDOUT
+        MOV     #PART1,-(SP)    ; S = PART1
+        JSR     PC,FPUTS        ; FPUTS(S, STREAM)
+        ADD     #4,PC           ; CLEAN UP STACK
 
-        MOV     #PUTC,-(SP)     ; PUSH PUTC
+        MOV     #PUTCHR,-(SP)   ; PUSH PUTCHR
         MOV     ICCOPY+2,-(SP)  ; PUSH LO WORD OF PART 1
         MOV     ICCOPY,-(SP)    ; PUSH HI WORD OF PART 1
         JSR     PC,FU3210       ; OUTPUT THE PART 1 SOLUTION
         ADD     #6,SP           ; CLEAN UP STACK
 
-        MOV     #CRLF,-(SP)     ; PUSH CRLF
-        JSR     PC,PUTS         ; PRINT IT
-        CLR     (SP)+           ; CLEAN UP STACK
+        MOV     #STDOUT,-(SP)   ; STREAM = STDOUT
+        MOV     #CRLF,-(SP)     ; S = CRLF
+        JSR     PC,FPUTS        ; FPUTS(S, STREAM)
+        ADD     #4,SP           ; CLEAN UP STACK
 
         CLR     R1              ; R1 <- NOUN
         CLR     R2              ; R2 <- VERB
@@ -109,23 +110,25 @@ S2:
         ADD     #4,SP           ; CLEAN STACK
         ADD     R2,R1           ; ADD VERB, NOW R1 IS OUR SOLUTION
 
-        MOV     #PART2,-(SP)    ; PUSH "PART 2: "
-        JSR     PC,PUTS         ; PUTS("PART 2: ")
-        TST     (SP)+           ; CLEAN UP STACK
+        MOV     #STDOUT,-(SP)   ; STREAM = STDOUT
+        MOV     #PART2,-(SP)    ; S = PART2
+        JSR     PC,FPUTS        ; FPUTS(S, STREAM)
+        ADD     #4,SP           ; CLEAN UP STACK
 
-        MOV     #PUTC,-(SP)     ; PUSH PUTC
+        MOV     #PUTCHR,-(SP)   ; PUSH PUTCHR
         MOV     R1,-(SP)        ; PUSH LO WORD OF PART 2
         CLR     -(SP)           ; PUSH HI WORD (0) OF PART 1
         JSR     PC,FU3210       ; OUTPUT THE PART 1 SOLUTION
         ADD     #6,SP           ; CLEAN UP STACK
 
-        MOV     #CRLF,-(SP)     ; PUSH CRLF
-        JSR     PC,PUTS         ; PRINT IT
-        CLR     (SP)+           ; CLEAN UP STACK
+        MOV     #STDOUT,-(SP)   ; STREAM = STDOUT
+        MOV     #CRLF,-(SP)     ; S = CRLF
+        JSR     PC,FPUTS        ; FPUTS(S, STREAM)
+        ADD     #4,SP           ; CLEAN UP STACK
 
         ADD     #2,SP           ; DEALLOCATE LOCALS
         HALT                    ; PROGRAM COMPLETE
-        BR      START           ; RESTART ON CONTINUE
+        JMP      START          ; RESTART ON CONTINUE
 
 ;
 ; ICLOAD(ADDRESS, IN) -> R0: END ADDRESS
@@ -348,6 +351,11 @@ PART1:  .ASCII  "PART 1: "
 PART2:  .ASCII  "PART 2: "
         .BYTE   0
 
+
+        .EVEN
+IC:     .=.+1000                ; INTCODE PROGRAM ADDRESS
+ICCOPY: .=.+1000                ; INTCODE COPY ADDRESS
+
 ;
 ; LIBRARY CODE
 ;
@@ -357,49 +365,62 @@ PART2:  .ASCII  "PART 2: "
 
         .EVEN
 ;
-; PUTC(CHAR)
+; COPY(START,END,DEST)
 ;
-; WRITE A CHARACTER TO TELEPRINTER USING PROGRAMMED I/O
+; COPY MEMORY FROM START TO END TO DEST
 ;
-PUTC:   MOV     R0,-(SP)        ; SAVE R0
-        MOV     4(SP),R0        ; R0 <- CHAR
-PC1:    TSTB    TPS             ; IS THE TTY READY?
-        BPL     PC1             ; IF NOT, TRY AGAIN
-        MOVB    R0,TPB          ; WRITE BYTE TO TTY, INC PTR
+COPY:
+        MOV     R0,-(SP)        ; SAVE R0
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     R2,-(SP)        ; SAVE R2
+
+        MOV     10(SP),R0       ; R0 <- START
+        MOV     12(SP),R1       ; R1 <- END
+        MOV     14(SP),R2       ; R2 <- DEST
+
+C0:     CMP     R0,R1           ; ARE WE DONE
+        BEQ     C1              ; IF SO, SKIP
+        MOV     (R0)+,(R2)+     ; COPY WORD TO DEST
+        BR      C0              ; NEXT
+C1:
+        MOV     (SP)+,R2        ; RESTORE R2
+        MOV     (SP)+,R1        ; RESTORE R1
         MOV     (SP)+,R0        ; RESTORE R0
         RTS     PC              ; RETURN TO CALLER
 
 ;
-; PUTS(BUFFER)
+; FU1610(VALUE, OUT)
 ;
-; WRITE NULL-TERMINATED STRING TO TELEPRINTER
-; USING PROGRAMMED I/O
+; FORAMT AN UNSIGNED WORD TO DECIMAL, CALLING THE OUT SUBROUTINE
+; FOR EACH DIGIT.
 ;
-PUTS:   MOV     R0,-(SP)        ; SAVE R0
-        MOV     4(SP),R0        ; R0 <- BUFFER
-PS0:    TSTB    @R0             ; IS THE BYTE ZERO?
-        BEQ     PS2             ; YES, DONE
-PS1:    TSTB    TPS             ; IS THE TTY READY?
-        BPL     PS1             ; IF NOT, TRY AGAIN
-        MOVB    (R0)+,TPB       ; WRITE BYTE TO TTY, INC PTR
-        BR      PS0             ; CONTINUE
-PS2:    MOV     (SP)+,R0        ; RESTORE R0
-        RTS     PC              ; RETURN TO CALLER
+FU1610:  MOV    R2,-(SP)        ; SAVE R2
+         MOV    R3,-(SP)        ; SAVE R3
+         MOV    R4,-(SP)        ; SAVE R4
+         MOV    10(SP),R0       ; R0 <- VALUE
+         MOV    12(SP),R3       ; R3 <- OUT SUBROUTINE
+         CLR    R4              ; R4 <- COUNTER (0)
 
-;
-; GETC() -> R0L: THE BYTE READ.  SETS CARRY ON ERROR.
-;
-; GET A BYTE FROM THE HIGH SPEED PAPER TAPE
-GETC: INC PRS                   ; SET PRS ENABLE
-GC1:  BIT       #100200,PRS     ; IS BYTE AVAILABLE OR ERROR?
-      BEQ       GC1             ; IF NOT, KEEP TRYING
-      BMI       GC2             ; IF ERROR, DONE
-      MOVB      PRB,R0          ; PUT BYTE INTO R0
-      CLC                       ; CLEAR CARRY (ERROR) FLAG
-      RTS       PC              ; RETURN TO CALLER
-GC2:  SEC                       ; SET CARRY (ERROR) FLAG
-      RTS       PC              ; RETURN TO CALLER
+F1:      MOV    #12,-(SP)       ; PUSH DIVISOR (10D)
+         MOV    R0,-(SP)        ; PUSH DIVIDEND (VALUE)
+         JSR    PC,DIVU16       ; DIVU16(VALUE, 10D)
+         ADD    #4,SP           ; CLEAN UP STACK
+         ADD    #60,R1          ; CONVERT REMAINDER TO CHAR
+         MOVB   R1,-(SP)        ; PUSH DIGIT TO STACK
+         INC    R4              ; INCREMENT THE COUNTER
+         TST    R0              ; CHECK THE QUOTIENT
+         BNE    F1              ; IF NOT ZERO, MOVE TO NEXT DIGIT
 
+F2:      JSR    PC,(R3)         ; OUT(CHAR) CHAR ALREADY ON STACK
+         TSTB   (SP)+           ; POP CHAR TO NOWHERE
+         DEC    R4              ; DECREMENT THE COUNTER
+         BNE    F2              ; MOVE TO NEXT DIGIT
+
+         MOV    10(SP),R0       ; RETURN ORIGINAL VALUE
+         MOV    (SP)+,R4        ; RESTORE R4
+         MOV    (SP)+,R3        ; RESTORE R3
+         MOV    (SP)+,R2        ; RESTORE R2
+         RTS    PC              ; RETURN TO CALLER
 
 ;
 ; FU3210(VALUE HI, VALUE LO, OUT)
@@ -474,8 +495,11 @@ P10U32: MOV     R2,-(SP)        ; SAVE R2
         CLR     R3              ; CLEAR LO RESULT
 
 P101:   JSR     PC,(R5)         ; CALL IN SUBRUTINE
-        MOV     R0,R4           ; STASH BYTE IN R4
-        BCS     P102            ; IF ERROR, DONE
+        TST     R0              ; WAS EOF RETURNED?
+        BPL     P104            ; NO, CONTINUE
+        SEC                     ; SET THE CARRY (ERROR) FLAG
+        BR      P102            ; DONE
+P104:   MOV     R0,R4           ; STASH BYTE IN R4
         CMP     R0,#60          ; IS IT LESS THAN '0'?
         BMI     P103            ;   YES, DONE
         CMP     #71,R0          ; IS IT GREATER THAN '9'?
@@ -513,8 +537,367 @@ P102:   MOV     R2,R0           ; HI RESULT <- R2
         MOV     (SP)+,R2        ; RESTORE R2
         RTS     PC              ; RETURN TO CALLER
 
+; PTGETC
 ;
+; CALLS FGETC(PTR)
 ;
+PTGETC:
+        MOV     #PTIN,-(SP)     ; STREAM = PTIN
+        JSR     PC,FGETC        ; FGETC(STREAM)
+        CLR     (SP)+           ; CLEAN UP STACK
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; UNISTD
+;
+
+; ssize_t read(int fildes, void *buf, size_t nbyte);
+;
+; READ FROM A FILE
+;
+READ:
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     R2,-(SP)        ; SAVE R2
+
+        MOV     6(SP),R1        ; R1 <- FILEDES
+        ASL     R1              ; MULTIPLY BY 2
+        MOV     FDTABL(R1),R2   ; R2 <- FDTABL ENTRY
+        MOV     (R2),R2         ; R2 <- DEVICE READ
+
+        MOV     12(SP),-(SP)    ; PUSH NBYTE
+        MOV     12(SP),-(SP)    ; PUSH BUF
+        MOV     R1,-(SP)        ; PUSH FILEDES
+        JSR     PC,(R2)         ; CALL DEVICE READ
+        ADD     #6,SP           ; CLEAN UP STACK
+
+        MOV     (SP)+,R2        ; RESTORE R2
+        MOV     (SP)+,R1        ; RESTORE R1
+        RTS     PC              ; RETURN TO CALLER
+
+; ssize_t write(int fildes, const void *buf, size_t nbyte);
+;
+; WRITE ON A FILE
+;
+WRITE:
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     R2,-(SP)        ; SAVE R2
+
+        MOV     6(SP),R1        ; R1 <- FILEDES
+        ASL     R1              ; MULTIPLY BY 2
+        MOV     FDTABL(R1),R2   ; R2 <- FDTABL ENTRY
+        MOV     2(R2),R2        ; R2 <- DEVICE WRITE
+
+        MOV     12(SP),-(SP)    ; PUSH NBYTE
+        MOV     12(SP),-(SP)    ; PUSH BUF
+        MOV     R1,-(SP)        ; PUSH FILEDES
+        JSR     PC,(R2)         ; CALL DEVICE WRITE
+        ADD     #6,SP           ; CLEAN UP STACK
+
+        MOV     (SP)+,R2        ; RESTORE R2
+        MOV     (SP)+,R1        ; RESTORE R1
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; STDIO
+;
+
+; int fputc(int c, FILE *stream);
+;
+; PUT A BYTE ON A STREAM
+;
+FPUTC:
+        MOV     SP,R0           ; R0 <- SP
+        ADD     #2,R0           ; R0 <- LOCATION OF C
+
+        MOV     #1,-(SP)        ; NBYTE = 1
+        MOV     R0,-(SP)        ; BUF = LOCATION OF C
+        MOV     @10(SP),-(SP)   ; FD = stream->fd
+        JSR     PC,WRITE        ; WRITE(FD, BUF, NBYTE)
+        ADD     #6,SP           ; CLEAN UP STACK
+
+        RTS     PC              ; RETURN TO CALLER
+
+; int putchar(int c);
+;
+; PUT A BYTE ON A STDOUT STREAM
+;
+PUTCHR:
+        MOV     #STDOUT,-(SP)  ; STREAM = STDOUT
+        MOV     4(SP),-(SP)    ; C = C
+        JSR     PC,FPUTC       ; FPUTC(C, STREAM)
+        ADD     #4,SP          ; CLEAN UP STACK
+        RTS     PC             ; RETURN TO CALLER
+
+; int fgetc(FILE *stream);
+; int getc(FILE *stream);
+;
+; GET A BYTE FROM A STREAM
+;
+FGETC:
+GETC:
+        MOV     2(SP),R0        ; R0 <- STREAM
+        ADD     #2,R0           ; R0 <- UNGETC BUFFER
+        TST     (R0)            ; SET STATUS FROM UNGETC BUFFER
+        BPL     FGETC1          ; IF EMPTY, GET FROM UNDERLYING FILE
+        BIC     #100000,(R0)    ; CLEAR THE UNGETC BUFFER FULL BIT
+        MOV     (R0),R0         ; RETURN THE BYTE FROM THE UNGETC BUF
+        BR      FGETC9          ; WE'RE DONE
+
+FGETC1: CLR     -(SP)           ; SPACE FOR BUFFER
+        MOV     SP,R0           ; R0 <- LOCATION OF BUFFER
+
+        MOV     #1,-(SP)        ; NBYTE = 1
+        MOV     R0,-(SP)        ; BUF = LOCATION OF BUFFER
+        MOV     @10(SP),-(SP)   ; FD = stream->fd
+        JSR     PC,READ         ; READ(FD, BUF, NBYTE)
+        ADD     #6,SP           ; CLEAN UP STACK
+        TST     R0              ; IS R0 ZERO?
+        BNE     FGETC8          ; NO, SKIP
+        MOV     #-1,(SP)        ; RETURN EOF
+FGETC8: MOV     (SP)+,R0        ; COPY BUFFER TO R0
+FGETC9: RTS     PC              ; RETURN TO CALLER
+
+; int ungetc(int c, FILE *stream);
+;
+; PUSH BYTE BACK INTO INPUT STREAM
+;
+UNGETC:
+        MOV     4(SP),R0        ; R0 <- STREAM
+        ADD     #2,R0           ; R0 <- UNGETC BUFFER
+        TST     (R0)            ; SET STATUS FROM BUFFER
+        BMI     UNGET1          ; BUFFER IS FULL, RETURN
+        MOV     2(SP),(R0)      ; SAVE THE BYTE TO THE UNGETC BUFFER
+        BIS     #100000,(R0)    ; SET THE UNGETC BUFFER FULL BIT
+        MOV     2(SP),R0        ; RETURN THE PUSHED BYTE
+        BR      UNGET9          ; WE'RE DONE
+UNGET1: MOV     #-1,R0          ; RETURN -1
+UNGET9: RTS     PC              ; RETURN TO CALLER
+
+; int fputs(const char *restrict s, FILE *restrict stream);
+;
+; PUT A STRING ON A STREAM
+;
+FPUTS:
+        MOV     2(SP),R0        ; R0 <- S
+        TSTB    (R0)+           ; IS (R0) ZERO?
+        BNE     .-2             ; NO, TRY NEXT BYTE
+        SUB     2(SP),R0        ; R0 -= S
+
+        MOV     R0,-(SP)        ; NBYTE = R0
+        MOV     4(SP),-(SP)     ; BUF = S
+        MOV     @10(SP),-(SP)   ; FILEDES = STREAM->fd
+        JSR     PC,WRITE        ; WRITE(FILEDES, BUF, NBYTE)
+        ADD     #6,SP           ; CLEAN UP STACK
+        CLR     R0              ; RETURN NON-NEGATIVE
+        RTS     PC              ; RETURN TO CALLER
+
+
+;
+; KL11 TELETYPE DRIVER
+;
+        TKS=    177560          ; TELETYPE KEYBOARD STATUS
+        TKB=    177562          ; TELETYPE KEYBOARD BUFFER
+        TPS=    177564          ; TELEPRINTER STATUS WORD
+        TPB=    177566          ; TELEPRINTER BUFFER
+
+; ssize_t read(int fildes, void *buf, size_t nbyte);
+;
+; READ FROM A KL11 TELETYPE CONTROLLER
+;
+TTIRD:
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     R2,-(SP)        ; SAVE R2
+                                ; STACK:
+                                ;  0: R2
+                                ;  2: R1
+                                ;  4: RETURN ADDRESS
+                                ;  6: FILEDES
+                                ; 10: BUF
+                                ; 12: NBYTE
+        MOV     12(SP),R1       ; R1 <- NBYTE
+        MOV     10(SP),R2       ; R2 <- BUF
+        CLR     R0              ; R0 <- BYTES READ
+        TST     R1              ; IS NBYTE ZERO?
+TTIRD1: BEQ     TTIRD9          ; YES, WE'RE DONE
+        BIS     #1,TKS          ; SET RDR ENB
+        TSTB    TKS             ; IS DONE SET?
+        BPL     .-4             ; NO, TRY AGAIN
+        MOVB    TKB,(R2)        ; COPY TO BUF
+        ; TODO: IOCTL OR TCSETATTR TO CONTROL ECHO
+        TSTB    TPS             ; IS TELEPRINTER READY?
+        BPL     .-4             ; NO, TRY AGAIN
+        MOVB    (R2)+,TPB       ; ECHO TO TELEPRINTER
+        INC     R0              ; INCREMENT READ BYTE COUNT
+        DEC     R1              ; DECREMENT COUNT OF REMAINING BYTES
+        BR      TTIRD1          ; NEXT BYTE
+TTIRD9:
+        MOV     (SP)+,R2        ; RESTORE R2
+        MOV     (SP)+,R1        ; RESTORE R1
+        RTS     PC              ; RETURN TO CALLER
+
+; ssize_t write(int fildes, const void *buf, size_t nbyte);
+;
+; WRITE ON A Kl11 TELETYPE CONTROLLER
+;
+TTOWR:
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     R2,-(SP)        ; SAVE R2
+                                ; STACK:
+                                ;  0: R2
+                                ;  2: R1
+                                ;  4: RETURN ADDRESS
+                                ;  6: FILEDES
+                                ; 10: BUF
+                                ; 12: NBYTE
+        CLR     R0              ; R0 <- BYTES READ (0)
+        MOV     12(SP),R1       ; R1 <- NBYTE
+        MOV     10(SP),R2       ; R2 <- BUF
+
+        TST     R1              ; IS NBYTE ZERO?
+TTOWR1: BEQ     TTOWR9          ; IF SO, WE'RE DONE
+        TSTB    TPS             ; IS TELEPRINTER READY?
+        BPL     .-4             ; NO, TRY AGAIN
+        MOVB    (R2)+,TPB       ; WRITE BYTE TO TELEPRINTER
+        INC     R0              ; INCREMENT BYTE READ COUNT
+        DEC     R1              ; DECREMENT COUNT OF REMAINING BYTES
+        BR      TTOWR1          ; NEXT BYTE
+
+TTOWR9: MOV     (SP)+,R2        ; RESTORE R2
+        MOV     (SP)+,R1        ; RESTORE R2
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; PC11 HIGH-SPEED PAPER TAPE READER/PUNCH DRIVER
+;
+        PRS=    177550          ; PAPER TAPE READER STATUS WORD
+        PRB=    177552          ; PAPER TAPE READER BUFFER
+        PPS=    177554          ; PAPER TAPE PUNCH STATUS WORD
+        PPB=    177556          ; PAPER TAPE PUNCH BUFFER
+
+; ssize_t read(int fildes, void *buf, size_t nbyte);
+;
+; READ FROM A PC11 PAPER TAPE READER CONTROLLER
+;
+PTRRD:
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     R2,-(SP)        ; SAVE R2
+
+        MOV     12(SP),R1       ; R1 <- NBYTE
+        MOV     10(SP),R2       ; R2 <- BUFFER
+        CLR     R0              ; R0 <- COUNT OF BYTES READ (0)
+
+        TST     R1              ; IS R1 ZERO?
+PTRRD1: BEQ     PTRRD9          ; IF SO, WE'RE DONE
+        BIS     #1,PRS          ; SET RDR ENB
+        BIT     #100200,PRS     ; CHECK FOR ERROR OR DONE
+        BEQ     .-6             ; IF NIETHER, TRY AGAIN
+        BMI     PTRRD9          ; IF ERROR, WE'RE DONE
+        MOVB    PRB,(R2)+       ; READ BYTE INTO BUFFER
+        INC     R0              ; INCREMENT BYTES READ COUNT
+        DEC     R1              ; DECREMENT BYTES REMAINING COUNT
+        BR      PTRRD1          ; NEXT BYTE
+
+PTRRD9: MOV     (SP)+,R2        ; RESTORE R2
+        MOV     (SP)+,R1        ; RESTORE R1
+        RTS     PC              ; RETURN TO CALLER
+
+
+; ssize_t write(int fildes, void *buf, size_t nbyte);
+;
+; WRITE ON A PC11 PAPER TAPE PUNCH CONTROLLER
+;
+PTPWR:
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     R2,-(SP)        ; SAVE R2
+
+        MOV     12(SP),R1       ; R1 <- NBYTE
+        MOV     10(SP),R2       ; R2 <- BUFFER
+        CLR     R0              ; R0 <- COUNT OF BYTES READ (0)
+
+        TST     R1              ; IS R1 ZERO?
+PTPWR1: BEQ     PTPWR9          ; IF SO, WE'RE DONE
+        BIT     #100200,PPS     ; CHECK FOR ERROR OR READY
+        BEQ     .-6             ; IF NEITHER, TRY AGAIN
+        BMI     PTPWR9          ; IF ERROR, WE'RE DONE
+        MOVB    (R2)+,PPB       ; WRITE BYTE TO PUNCH
+        INC     R0              ; INCREMENT BYTES READ COUNT
+        DEC     R1              ; DECREMENT BYTES REMAINING COUNT
+        BR      PTPWR1          ; NEXT BYTE
+
+PTPWR9: MOV     (SP)+,R2        ; RESTORE R2
+        MOV     (SP)+,R1        ; RESTORE R1
+        RTS     PC              ; RETURN TO CALLER
+;
+; NULL DEVICE DRIVER
+;
+; ssize_t read(int fildes, void *buf, size_t nbyte);
+; ssize_t write(int fildes, const void *buf, size_t nbyte);
+;
+; READ FROM A NULL STREAM
+; WRITE ON A NULL STREAM
+;
+NULRD:
+NULWR:
+        CLR     R0              ; NO BYTES READ OR WRITTEN
+        RTS     PC              ; RETURN TO CALLER
+
+
+; FILE DESCRIPTOR TABLE
+FDTABL:
+        .WORD   TTI             ; FD 0: TTY IN
+        .WORD   TTO             ; FD 1: TTY OUT
+        .WORD   TTO             ; FD 2: ERRORS -> TTY OUT
+        .WORD   PTR             ; FD 3: PTR IN
+        .WORD   PTP             ; FD 4: PTP OUT
+        .WORD   0               ; END OF TABLE
+
+; FILE DESCRIPTOR TABLE ENTRY STRUCTURE
+; 0: READ SUBROUTINE
+; 2: WRITE SUBROUTINE
+; 4: UNIT
+
+TTI:
+        .WORD   TTIRD
+        .WORD   NULWR
+        .WORD   0
+
+TTO:
+        .WORD   NULRD
+        .WORD   TTOWR
+        .WORD   0
+
+PTR:
+        .WORD   PTRRD
+        .WORD   NULWR
+        .WORD   0
+
+PTP:    .WORD   NULRD
+        .WORD   PTPWR
+        .WORD   0
+
+;
+; OPEN STREAMS
+;
+; FILE STREAM STRUCTURE
+;  0: FD
+;  2: UNGETC BUFFER
+
+STDIN:  .WORD   0
+        .WORD   0
+STDOUT: .WORD   1
+        .WORD   0
+STDERR: .WORD   2
+        .WORD   0
+PTIN:   .WORD   3
+        .WORD   0
+PTOUT:  .WORD   4
+        .WORD   0
+
+
+;
+; MATH
+;
+
 ; MULU16(MULTIPLICAND, MULTIPLIER) -> R0: HI, R1: LO
 ;
 ; UNSIGNED 16-BIT MULTIPLICATION
@@ -555,7 +938,6 @@ M1:     DEC     R4              ; DECREMENT THE COUNTER
 MUL32P:
         MOV     R2,-(SP)        ; SAVE R2
         MOV     R3,-(SP)        ; SAVE R3
-
         MOV    10(SP),-(SP)     ; PUSH LO(A): MULTIPLICAND LO
         MOV    16(SP),-(SP)     ; PUSH LO(B): MULTIPLIER LO
         JSR    PC,MULU16        ; MULTIPLY LO(A) * LO(B)
@@ -578,6 +960,43 @@ MUL32P:
         MOV    (SP)+,R3         ; RESTORE R3
         MOV    (SP)+,R2         ; RESTORE R2
         RTS    PC               ; RETURN TO CALLER
+
+; DIVU16(DIVIDEND, DIVISOR) -> R0: QUOTIENT, R1: REMAINDER
+;
+; UNSIGNED 16-BIT DIVISION
+;
+DIVU16:
+        TST     4(SP)           ; CHECK THE DIVISOR
+        BNE     DD1             ; IF NOT ZERO, CONTINUE
+        SEV                     ; SET OVERFLOW (ERROR)
+        RTS     PC              ; RETURN TO CALLER
+DD1:
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     R4,-(SP)        ; SAVE R4
+
+        CLR     R0              ; R0 <- QUOTIENT
+        CLR     R1              ; R1 <- REMAINDER
+        MOV     10(SP),R2       ; R2 <- DIVIDEND
+        MOV     12(SP),R3       ; R3 <- DIVISOR
+        MOV     #20,R4          ; R4 <- COUNTER
+DD2:
+        ASL     R0              ; SHIFT QUOTIENT LEFT
+        ASL     R2              ; SHIFT DIVIDEND LEFT
+        ROL     R1              ; ROTATE REMAINDER LEFT, WITH CARRY
+        CMP     R1,R3           ; IS DIVISOR <= REMAINDER?
+        BMI     DD3             ; NO, CONTINUE
+        SUB     R3,R1           ; REMAINDER -= DIVISOR
+        BIS     #1,R0           ; SET LOW BIT IN QUOTIENT
+DD3:
+        DEC     R4              ; DEC COUNTER
+        BNE     DD2             ; IF NOT ZERO, REPEAT
+
+        MOV     (SP)+,R4        ; RESTORE R4
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        CLV                     ; INDICATE NO ERROR
+        RTS     PC              ; RETURN TO CALLER
 
 ; DIVU32(DIVIDEND HI, DIVIDEND LO, DIVISOR HI, DIVISOR LO, RESULT)
 ; (RESULT) -> QUOTIENT HI, QUOTIENT LO, REMAINDER HI, REMAINDER LO
@@ -632,28 +1051,5 @@ DA3:
         CLV                     ; CLEAR ERROR FLAG
         RTS     PC              ; RETURN TO CALLER
 
-;
-; COPY(START,END,DEST)
-;
-; COPY MEMORY FROM START TO END TO DEST
-;
-COPY:
-        MOV     R0,-(SP)        ; SAVE R0
-        MOV     R1,-(SP)        ; SAVE R1
-        MOV     R2,-(SP)        ; SAVE R2
-
-        MOV     10(SP),R0       ; R0 <- START
-        MOV     12(SP),R1       ; R1 <- END
-        MOV     14(SP),R2       ; R2 <- DEST
-
-C0:     CMP     R0,R1           ; ARE WE DONE
-        BEQ     C1              ; IF SO, SKIP
-        MOV     (R0)+,(R2)+     ; COPY WORD TO DEST
-        BR      C0              ; NEXT
-C1:
-        MOV     (SP)+,R2        ; RESTORE R2
-        MOV     (SP)+,R1        ; RESTORE R1
-        MOV     (SP)+,R0        ; RESTORE R0
-        RTS     PC              ; RETURN TO CALLER
 
         .END
