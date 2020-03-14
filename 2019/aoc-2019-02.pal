@@ -21,10 +21,6 @@
         R5=     %5              ; REGISTER 5
         SP=     %6              ; STACK POINTER
         PC=     %7              ; PROGRAM COUNTER
-        PRS=    177550          ; HIGH SPEED PAPER TAPE READER STATUS
-        PRB=    177552          ; HIGH SPEED PAPER TAPE READER BUFFER
-        TPS=    177564          ; TELEPRINTER STATUS WORD
-        TPB=    177566          ; TELEPRINTER BUFFER
 
 ;
 ; START OF PROGRAM
