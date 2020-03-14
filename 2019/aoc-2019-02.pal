@@ -39,9 +39,9 @@ START:  MOV     #.,SP           ; SET UP STACK
         JSR     PC,FPUTS         ; FPUTS(S, STDOUT)
         ADD     #4,SP           ; CLEAN UP STACK
 
-        MOV     #PTGETC,-(SP)   ; PUSH PTGETC
+        MOV     #PTIN,-(SP)     ; PUSH PTIN
         MOV     #IC,-(SP)       ; PUSH INTCODE START ADDRESS
-        JSR     PC,ICLOAD       ; ICLOAD(IC, PTGETC)
+        JSR     PC,ICLOAD       ; ICLOAD(IC, PTIN)
         ADD     #4,SP           ; CLEAN UP STACK
         MOV     R0,(SP)         ; STORE END OF PROGRAM ADDRESS
 
@@ -63,7 +63,7 @@ START:  MOV     #.,SP           ; SET UP STACK
         JSR     PC,FPUTS        ; FPUTS(S, STREAM)
         ADD     #4,SP           ; CLEAN UP STACK
 
-        MOV     #PUTCHR,-(SP)   ; PUSH PUTCHR
+        MOV     #STDOUT,-(SP)   ; PUSH STDOUT
         MOV     ICCOPY+2,-(SP)  ; PUSH LO WORD OF PART 1
         MOV     ICCOPY,-(SP)    ; PUSH HI WORD OF PART 1
         JSR     PC,FU3210       ; OUTPUT THE PART 1 SOLUTION
@@ -115,7 +115,7 @@ S2:
         JSR     PC,FPUTS        ; FPUTS(S, STREAM)
         ADD     #4,SP           ; CLEAN UP STACK
 
-        MOV     #PUTCHR,-(SP)   ; PUSH PUTCHR
+        MOV     #STDOUT,-(SP)   ; PUSH STDOUT
         MOV     R1,-(SP)        ; PUSH LO WORD OF PART 2
         CLR     -(SP)           ; PUSH HI WORD (0) OF PART 1
         JSR     PC,FU3210       ; OUTPUT THE PART 1 SOLUTION
@@ -131,23 +131,26 @@ S2:
         JMP      START          ; RESTART ON CONTINUE
 
 ;
-; ICLOAD(ADDRESS, IN) -> R0: END ADDRESS
+; ICLOAD(ADDRESS, STREAM) -> R0: END ADDRESS
 ;
-; LOAD INTCODE INTO MEMORY AT THE GIVEN ADDRESS, USING THE IN ROUTINE
+; LOAD INTCODE INTO MEMORY AT THE GIVEN ADDRESS FROM THE STREAM
 ;
 ICLOAD:
         MOV     R1,-(SP)        ; SAVE R1
         MOV     R2,-(SP)        ; SAVE R2
         MOV     R3,-(SP)        ; SAVE R3
         MOV     10(SP),R3       ; R3 <- ADDRESS
-        MOV     12(SP),R2       ; R2 <- IN
+        MOV     12(SP),R2       ; R2 <- STREAM
 ICL0:
-        MOV     R2,-(SP)        ; PUSH IN
-        JSR     PC,P10U32       ; P10U32(IN)
+        MOV     R2,-(SP)        ; PUSH STREAM
+        JSR     PC,P10U32       ; P10U32(STREAM)
         BCS     ICL1            ; IF CARRY SET, DONE
         TST     (SP)+           ; CLEAN UP STACK
         MOV     R0,(R3)+        ; STORE VALUE HI
         MOV     R1,(R3)+        ; STORE VALUE LO
+        MOV     R2,-(SP)        ; STREAM = R2
+        JSR     PC,FGETC        ; FGETC(STREAM)
+        CLR     (SP)+           ; CLEAN UP STACK
         BR      ICL0            ; NEXT VALUE
 
 ICL1:   TST     (SP)+           ; CLEAN UP STACK FROM LAST P10U32 CALL
@@ -423,7 +426,7 @@ F2:      JSR    PC,(R3)         ; OUT(CHAR) CHAR ALREADY ON STACK
          RTS    PC              ; RETURN TO CALLER
 
 ;
-; FU3210(VALUE HI, VALUE LO, OUT)
+; FU3210(VALUE HI, VALUE LO, STREAM)
 ;
 ; FORAMT AN UNSIGNED DOUBLE WORD TO DECIMAL, CALLING THE OUT SUBROUTINE
 ; FOR EACH DIGIT.
@@ -464,9 +467,10 @@ FF1:    MOV     R2,-(SP)        ; PUSH RESULT ADDRESS
         BNE     FF1             ; NO, REPEAT
 
 FF2:
+        MOV     42(SP),-(SP)    ; STREAM
         MOVB    -(R3),-(SP)     ; PUSH CHAR
-        JSR     PC,@44(SP)      ; OUTPUT FIRST DIGIT
-        TST     (SP)+           ; POP CHAR OFF STACK
+        JSR     PC,FPUTC        ; FPUTC(C, STREAM)
+        ADD     #4,SP           ; CLEAN UP STACK
         DEC     R4              ; DECREMENT COUNTER
         BNE     FF2             ; IF NOT DONE, NEXT CHAR
 
@@ -479,10 +483,9 @@ FF2:
         MOV     (SP)+,R0        ; RESTORE R0
         RTS     PC              ; RETURN TO CALLER
 
-; P10U32(IN) -> R0: HI, R1: LO
+; P10U32(STREAM) -> R0: HI, R1: LO
 ;
-; PARSE A 32 BIT VALUE FROM DECIMAL STRING, USING THE IN SUBROUTINE.
-; CONSUMES THE FIRST NON-DECIMAL-DIGIT AFTER THE NUMBER
+; PARSE A 32 BIT VALUE FROM DECIMAL STRING FROM THE STREAM
 P10U32: MOV     R2,-(SP)        ; SAVE R2
         MOV     R3,-(SP)        ; SAVE R3
         MOV     R4,-(SP)        ; SAVE R4
@@ -494,7 +497,9 @@ P10U32: MOV     R2,-(SP)        ; SAVE R2
         CLR     R2              ; CLEAR HI RESULT
         CLR     R3              ; CLEAR LO RESULT
 
-P101:   JSR     PC,(R5)         ; CALL IN SUBRUTINE
+P101:   MOV     R5,-(SP)        ; STREAM = R5
+        JSR     PC,FGETC        ; FGETC(STREAM)
+        CLR     (SP)+           ; CLEAN UP STACK
         TST     R0              ; WAS EOF RETURNED?
         BPL     P104            ; NO, CONTINUE
         SEC                     ; SET THE CARRY (ERROR) FLAG
@@ -528,23 +533,17 @@ P104:   MOV     R0,R4           ; STASH BYTE IN R4
 
         BR      P101            ; NEXT DIGIT
 
-P103:   CLC                     ; CLEAR ERROR INDICATOR
+P103:   MOV     R5,-(SP)        ; STREAM = R5
+        MOV     R0,-(SP)        ; C = R0
+        JSR     PC,UNGETC       ; UNGETC(C, STREAM)
+        ADD     #4,SP           ; CLEAN UP STACK
+        CLC                     ; CLEAR ERROR INDICATOR
 P102:   MOV     R2,R0           ; HI RESULT <- R2
         MOV     R3,R1           ; LO RESULT <- R3
         MOV     (SP)+,R5        ; RESTORE R5
         MOV     (SP)+,R4        ; RESTORE R4
         MOV     (SP)+,R3        ; RESTORE R3
         MOV     (SP)+,R2        ; RESTORE R2
-        RTS     PC              ; RETURN TO CALLER
-
-; PTGETC
-;
-; CALLS FGETC(PTR)
-;
-PTGETC:
-        MOV     #PTIN,-(SP)     ; STREAM = PTIN
-        JSR     PC,FGETC        ; FGETC(STREAM)
-        CLR     (SP)+           ; CLEAN UP STACK
         RTS     PC              ; RETURN TO CALLER
 
 ;
