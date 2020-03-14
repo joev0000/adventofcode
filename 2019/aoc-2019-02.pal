@@ -61,7 +61,7 @@ START:  MOV     #.,SP           ; SET UP STACK
         MOV     #STDOUT,-(SP)   ; STREAM = STDOUT
         MOV     #PART1,-(SP)    ; S = PART1
         JSR     PC,FPUTS        ; FPUTS(S, STREAM)
-        ADD     #4,PC           ; CLEAN UP STACK
+        ADD     #4,SP           ; CLEAN UP STACK
 
         MOV     #PUTCHR,-(SP)   ; PUSH PUTCHR
         MOV     ICCOPY+2,-(SP)  ; PUSH LO WORD OF PART 1
@@ -353,8 +353,8 @@ PART2:  .ASCII  "PART 2: "
 
 
         .EVEN
-IC:     .=.+1000                ; INTCODE PROGRAM ADDRESS
-ICCOPY: .=.+1000                ; INTCODE COPY ADDRESS
+IC:     .=.+2000                ; INTCODE PROGRAM ADDRESS
+ICCOPY: .=.+2000                ; INTCODE COPY ADDRESS
 
 ;
 ; LIBRARY CODE
