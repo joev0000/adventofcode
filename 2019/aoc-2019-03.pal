@@ -28,10 +28,24 @@
         .=      1000            ; ASSEMBLE AT ADDRESS 1000
 START:  MOV     #.,SP           ; SET UP STACK
 
+        CLR     -(SP)           ; 2(SP): END OF PATH1
+        CLR     -(SP)           ; 0(SP): END OF PATH2
+
         MOV     #PTIN,-(SP)     ; PUSH PTIN STREAM
         MOV     #PATH1,-(SP)    ; PUSH PATH1
         JSR     PC,PARSE        ; PARSE THE PATH
         ADD     #4,SP           ; CLEAN UP STACK
+        SUB     #PATH1,R0       ; R0 IS THE COUNT OF BYTES
+        SUB     #4,R0           ; START AT THE LAST ELEMENT
+        MOV     R0,2(SP)        ; SAVE THE LAST ELEMENT OF PATH1
+
+        MOV     #PTIN,-(SP)     ; PUSH PTIN STREAM
+        MOV     #PATH2,-(SP)    ; PUSH PATH2
+        JSR     PC,PARSE        ; PARSE THE PATH
+        ADD     #4,SP           ; CLEAN UP STACK
+        SUB     #PATH2,R0       ; R0 IS THE COUNT OF BYTES
+        SUB     #6,R0           ; START AT THE LAST ELEMENT
+        MOV     R0,(SP)         ; SAVE THE LAST ELEMENT OF PATH2
 
         HALT                    ; PROGRAM COMPLETE
         BR      START           ; RESTART ON CONTINUE
@@ -44,16 +58,6 @@ START:  MOV     #.,SP           ; SET UP STACK
 ; DATA IS STORED AS A SERIES OF X AND Y VALUES.
 ; EXAMPLE: R75,D30,R83,U83,L12 IS STORED AS 75,-30,158,53,146 (10).
 PARSE:
-        ; clr (addr)+
-        ; a <- getc
-        ; if a = 'U' or 'D', clr(addr)+
-        ; br l0
-        ; l1: a <- getc
-        ; l0: p32u10
-        ; if a = 'L' or 'D', a = -a
-        ; (addr) = -2(addr) + a
-        ; inc addr
-        ; br l1;
         MOV     R2,-(SP)        ; SAVE R2
         MOV     R3,-(SP)        ; SAVE R3
         MOV     R4,-(SP)        ; SAVE R4
@@ -61,6 +65,7 @@ PARSE:
         MOV     10(SP),R2       ; R2 <- ADDRESS
         MOV     12(SP),R3       ; R3 <- STREAM
 
+        CLR     (R2)+           ; ADD LEADING ZERO
         CLR     (R2)+           ; CLEAR THE FIRST COORDINATE
         MOV     R3,-(SP)        ; STREAM = R3
         JSR     PC,FGETC        ; FGETC(STREAM)
@@ -110,6 +115,8 @@ PDONE:
         MOV     (SP)+,R2        ; RESTORE R2
         RTS     PC              ; RETURN TO CALLER
 PATH1:
+        .=.+2000
+PATH2:
         .=.+2000
 
 ;
