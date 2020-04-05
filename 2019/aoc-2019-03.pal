@@ -28,27 +28,136 @@
         .=      1000            ; ASSEMBLE AT ADDRESS 1000
 START:  MOV     #.,SP           ; SET UP STACK
 
-        CLR     -(SP)           ; 2(SP): END OF PATH1
-        CLR     -(SP)           ; 0(SP): END OF PATH2
+        SUB     #14,SP          ; LOCALS
+                                ; 12(SP): PATH2+2(R2)
+                                ; 10(SP): PATH2-2(R2)
+                                ;  6(SP): PATH1+2(R1)
+                                ;  4(SP): PATH1-2(R1)
+                                ;  2(SP): END OF PATH1
+                                ;  0(SP): END OF PATH2
 
         MOV     #PTIN,-(SP)     ; PUSH PTIN STREAM
         MOV     #PATH1,-(SP)    ; PUSH PATH1
         JSR     PC,PARSE        ; PARSE THE PATH
         ADD     #4,SP           ; CLEAN UP STACK
-        SUB     #PATH1,R0       ; R0 IS THE COUNT OF BYTES
-        SUB     #4,R0           ; START AT THE LAST ELEMENT
-        MOV     R0,2(SP)        ; SAVE THE LAST ELEMENT OF PATH1
+        SUB     #PATH1,R0       ; R0 <- LENGTH OF PATH1
+        MOV     R0,2(SP)        ; SAVE THE LENGTH OF PATH1
 
         MOV     #PTIN,-(SP)     ; PUSH PTIN STREAM
         MOV     #PATH2,-(SP)    ; PUSH PATH2
         JSR     PC,PARSE        ; PARSE THE PATH
         ADD     #4,SP           ; CLEAN UP STACK
-        SUB     #PATH2,R0       ; R0 IS THE COUNT OF BYTES
-        SUB     #6,R0           ; START AT THE LAST ELEMENT
-        MOV     R0,(SP)         ; SAVE THE LAST ELEMENT OF PATH2
+        SUB     #PATH2,R0       ; R0 <- LENGTH OF PATH2
+        MOV     R0,(SP)         ; SAVE THE LENGTH OF PATH2
 
+        ; 0,x0,y0,x1,y1,x2,y2
+        ;
+        ; i1 = 1
+        ; i2 = 2
+        ;
+        ; path1(i1-1) <= path2(i2) && path2(i2) <= path1(i1+1)
+        ; path2(i2-1) <= path1(i1) && path1(i1) <= path2(i2+1)
+        ;
+        ; Check horizontals of PATH1 vs. verticals of PATH2
+        ; Check verticals of PATH1 vs. horizontals of PATH2
+        ; Compare lower value vs. higher value.
+
+        MOV     #2,R5           ; R5 <- PATH2 START OFFSET
+        MOV     #2,R1           ; R1 <- INDEX IN PATH1
+L1:
+        CMP     R1,2(SP)        ; ARE WE AT THE END?
+        BGE     L9              ; IF SO, WE'RE DONE
+
+        ; LOAD PATH1 SEGMENT ENDS TO LOCALS
+        MOV     PATH1-2(R1),4(SP)
+        MOV     PATH1+2(R1),6(SP)
+
+        CMP     4(SP),6(SP)     ; COMPARE PATH1-2 AND PATH1+2
+        BLT     L5              ; IF SO, THEY ARE IN CORRECT ORDER
+        MOV     4(SP),R0        ; IF NOT, SWAP THEM
+        MOV     6(SP),4(SP)
+        MOV     R0,6(SP)
+
+L5:
+        MOV     #2,R2           ; R2 <- INDEX IN PATH2
+        ADD     R5,R2           ; ADD PATH2 START OFFSET
+L2:
+        CMP     R2,(SP)         ; ARE WE AT THE END OF PATH2?
+        BGE     L3              ; IF SO, MOVE ON TO NEXT PATH1
+
+        ; LOAD PATH2 SEGMENT ENDS TO LOCALS
+        MOV     PATH2-2(R2),10(SP)
+        MOV     PATH2+2(R2),12(SP)
+
+        CMP     10(SP),12(SP)   ; COMPARE PATH2-2 AND PATH2+2
+        BLT     L4              ; IF SO, THEY ARE IN CORRECT ORDER
+        MOV     10(SP),R0       ; IF NOT, SWAP THEM
+        MOV     12(SP),10(SP)
+        MOV     R0,12(SP)
+L4:
+        CMP     4(SP),PATH2(R2) ; IS PATH1-2(R1) <= PATH2(R2)?
+        BGT     L6              ; IF NOT, NO INTERSECTION
+        CMP     PATH2(R2),6(SP) ; IS PATH2(R2) <= PATH1+2(R1)?
+        BGT     L6              ; IF NOT, NO INTERSECTION
+        CMP     10(SP),PATH1(R1); IS PATH2-2(R2) <= PATH1(R1)?
+        BGT     L6              ; IF NOT, NO INTERSECTION
+        CMP     PATH1(R1),12(SP); IS PATH1(R1) <= PATH2+2(R2)?
+        BGT     L6              ; IF NOT, NO INTERSECTION
+
+        ; PRINT MATCH COORDINATES
+        TST     R5              ; IS PATH1 THE HORIZONTAL ELEMENT?
+        BNE     LLL             ; IF NOT, SKIP AHEAD
+        MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
+        MOV     PATH1(R1),-(SP) ; LO <- PATH1 VALUE
+        CLR     -(SP)           ; HI <- ZERO
+        JSR     PC,FU3210       ; FU3210(HI,LO,STREAM)
+        ADD     #6,SP           ; CLEAN UP STACK
+
+        MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
+        MOV     #054,-(SP)      ; C <- COMMA
+        JSR     PC,FPUTC        ; FPUTC(C, STREAM)
+        ADD     #4,SP           ; CLEAN UP STACK
+
+LLL:
+
+        MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
+        MOV     PATH2(R2),-(SP) ; LO <- PATH2 VALUE
+        CLR     -(SP)           ; HI <- ZERO
+        JSR     PC,FU3210       ; FU3210(HI,LO,STREAM)
+        ADD     #6,SP           ; CLEAN UP STACK
+        TST     R5              ; IS PATH1 THE HORIZONTAL ELEMENT?
+        BEQ     GGG             ; IF SO, SKIP AHEAD
+
+        MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
+        MOV     #054,-(SP)      ; C <- COMMA
+        JSR     PC,FPUTC        ; FPUTC(C,STREAM)
+        ADD     #4,SP           ; CLEAN UP STACK
+
+        MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
+        MOV     PATH1(R1),-(SP) ; LO <- PATH1 VALUE
+        CLR     -(SP)           ; HI <- ZERO
+        JSR     PC,FU3210       ; FU3210(HI,LO,STREAM)
+        ADD     #6,SP           ; CLEAN UP STACK
+
+GGG:
+        MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
+        MOV     #015,-(SP)      ; C <- CR
+        JSR     PC,FPUTC        ; FPUTC(C, STREAM)
+        MOV     #012,(SP)       ; C <- LF
+        JSR     PC,FPUTC        ; FPUTC(C, STREAM)
+        ADD     #4,SP           ; CLEAN UP STACK
+
+L6:
+        ADD     #4,R2           ; NEXT PARALLEL ELEMENT IN PATH2
+        BR      L2              ; NEXT ELEMENT IN PATH2
+L3:
+        ADD     #2,R1           ; INCREMENT PATH1 INDEX
+        NEG     R5              ; TOGGLE PATH2 START OFFSET
+        ADD     #2,R5           ;   USING R5 = 2 - R5
+        BR      L1              ; NEXT ELEMENT IN PATH1
+L9:
         HALT                    ; PROGRAM COMPLETE
-        BR      START           ; RESTART ON CONTINUE
+        JMP     START           ; RESTART ON CONTINUE
 
 ;
 ; PARSE(ADDRESS, STREAM) R0: ADDRESS END
@@ -76,6 +185,7 @@ PARSE:
         BEQ     PDU1            ; YES, HANDLE VERITICAL FIRST
         BR      P1              ; NO, CONTINUE
 PDU1:   CLR     (R2)+           ; FIRST HORIZONTAL IS ZERO
+        BR      P1              ; PARSE NUMBER
 
 P0:
         MOV     R3,-(SP)        ; STREAM = R3
@@ -114,6 +224,7 @@ PDONE:
         MOV     (SP)+,R3        ; RESTORE R3
         MOV     (SP)+,R2        ; RESTORE R2
         RTS     PC              ; RETURN TO CALLER
+
 PATH1:
         .=.+2000
 PATH2:
