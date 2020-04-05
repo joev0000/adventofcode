@@ -105,47 +105,18 @@ L4:
         BGT     L6              ; IF NOT, NO INTERSECTION
 
         ; PRINT MATCH COORDINATES
+
         TST     R5              ; IS PATH1 THE HORIZONTAL ELEMENT?
-        BNE     LLL             ; IF NOT, SKIP AHEAD
+        BNE     START1          ; NO, SKIP AHEAD
+        MOV     PATH1(R1),-(SP) ; ARG1 <- PATH1(R1)
+        MOV     PATH2(R2),-(SP) ; ARG0 <- PATH2(R2)
+        BR      START2          ; SKIP AHEAD
+START1: MOV     PATH2(R2),-(SP) ; ARG1 <- PATH2(R2)
+        MOV     PATH1(R1),-(SP) ; ARG0 <- PATH1(R1)
+START2: MOV     #COORDS,-(SP)   ; FORMAT <- COORDS
         MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
-        MOV     PATH1(R1),-(SP) ; LO <- PATH1 VALUE
-        CLR     -(SP)           ; HI <- ZERO
-        JSR     PC,FU3210       ; FU3210(HI,LO,STREAM)
-        ADD     #6,SP           ; CLEAN UP STACK
-
-        MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
-        MOV     #054,-(SP)      ; C <- COMMA
-        JSR     PC,FPUTC        ; FPUTC(C, STREAM)
-        ADD     #4,SP           ; CLEAN UP STACK
-
-LLL:
-
-        MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
-        MOV     PATH2(R2),-(SP) ; LO <- PATH2 VALUE
-        CLR     -(SP)           ; HI <- ZERO
-        JSR     PC,FU3210       ; FU3210(HI,LO,STREAM)
-        ADD     #6,SP           ; CLEAN UP STACK
-        TST     R5              ; IS PATH1 THE HORIZONTAL ELEMENT?
-        BEQ     GGG             ; IF SO, SKIP AHEAD
-
-        MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
-        MOV     #054,-(SP)      ; C <- COMMA
-        JSR     PC,FPUTC        ; FPUTC(C,STREAM)
-        ADD     #4,SP           ; CLEAN UP STACK
-
-        MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
-        MOV     PATH1(R1),-(SP) ; LO <- PATH1 VALUE
-        CLR     -(SP)           ; HI <- ZERO
-        JSR     PC,FU3210       ; FU3210(HI,LO,STREAM)
-        ADD     #6,SP           ; CLEAN UP STACK
-
-GGG:
-        MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
-        MOV     #015,-(SP)      ; C <- CR
-        JSR     PC,FPUTC        ; FPUTC(C, STREAM)
-        MOV     #012,(SP)       ; C <- LF
-        JSR     PC,FPUTC        ; FPUTC(C, STREAM)
-        ADD     #4,SP           ; CLEAN UP STACK
+        JSR     PC,FPRNTF       ; FPRNTF(STREAM, FORMAT, ...)
+        ADD     #10,SP          ; CLEAN UP STACK
 
 L6:
         ADD     #4,R2           ; NEXT PARALLEL ELEMENT IN PATH2
@@ -157,7 +128,11 @@ L3:
         BR      L1              ; NEXT ELEMENT IN PATH1
 L9:
         HALT                    ; PROGRAM COMPLETE
-        JMP     START           ; RESTART ON CONTINUE
+        BR      START           ; RESTART ON CONTINUE
+
+COORDS:
+        .ASCII  /(%i,%i)/
+        .BYTE 15,12,0
 
 ;
 ; PARSE(ADDRESS, STREAM) R0: ADDRESS END
@@ -536,6 +511,75 @@ FPUTS:
         JSR     PC,WRITE        ; WRITE(FILEDES, BUF, NBYTE)
         ADD     #6,SP           ; CLEAN UP STACK
         CLR     R0              ; RETURN NON-NEGATIVE
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; int fprintf(FILE *stream, char *format, ...)
+;
+; PRINT FORMATTED OUTPUT
+; SUPPORTS %u, %i, %d, AND %% FORMATTING DIRECTIVES
+;
+FPRNTF:
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     6(SP),-(SP)     ; PUT STREAM AT SP, FOR FPUTC
+
+        MOV     12(SP),R2       ; R2 <- FORMAT
+        MOV     #14,R3          ; R3 <- POINTER TO NEXT ARG
+        ADD     SP,R3
+
+FPRNT0:
+        TSTB    (R2)            ; CHECK FOR NULL
+        BEQ     FPRNT9          ; IF SO, WE'RE DONE
+        CMPB    #'%,(R2)        ; CHECK FOR %
+        BEQ     FPRNT1          ; IF SO, GO TO FORMAT SECTION
+        MOVB    (R2)+,-(SP)     ; C <- NEXT CHAR
+        JSR     PC,FPUTC        ; FPUTC(C, STREAM)
+        ADD     #2,SP           ; POP C OFF STACK
+        BR      FPRNT0          ; NEXT CHAR
+FPRNT1:
+        INC     R2              ; NEXT CHAR
+        TSTB    (R2)            ; IS IT NULL?
+        BEQ     FPRNT9          ; IF SO, WE'RE DONE
+        CMPB    #'%,(R2)        ; IS IT %
+        BEQ     FPRNT2          ; HANDLE PERCENT
+        CMPB    #'u,(R2)        ; IS IT u
+        BEQ     FPRNT3          ; HANDLE UNSIGNED INT IN DECIMAL
+        CMPB    #'i,(R2)        ; IS IT u
+        BEQ     FPRNT4          ; HANDLE SIGNED INT IN DECIMAL
+        CMPB    #'d,(R2)        ; IS IT u
+        BEQ     FPRNT4          ; HANDLE SIGNED INT IN DECIMAL
+        ; UNKNOWN FORMAT
+        INC     R2              ; INC POINTER
+        BR      FPRNT0          ; NEXT CHAR
+
+FPRNT2:
+        MOV     #'%,-(SP)       ; C <- %
+        JSR     PC,FPUTC        ; FPUTC(C, STREAM)
+        ADD     #2,SP           ; POP C OFF STACK
+        INC     R2              ; INC POINTER
+        BR      FPRNT0          ; NEXT CHAR
+
+FPRNT3:
+        MOV     (R3)+,-(SP)     ; LO <- ARG
+        CLR     -(SP)           ; HI <- ZERO
+        JSR     PC,FU3210       ; FU3210(HI,LO,STREAM)
+        ADD     #4,SP           ; POP HI AND LO OFF STACK
+        INC     R2              ; INC FORMAT POINTER
+        BR      FPRNT0          ; NEXT CHAR
+FPRNT4:
+        TST     (R3)            ; IS IT NEGATIVE?
+        BPL     FPRNT3          ; NO, PRINT UNSIGNED
+        NEG     (R3)            ; NEGATE VALUE
+        MOV     #'-,-(SP)       ; C <- -
+        JSR     PC,FPUTC        ; FPUTC(C, STREAM)
+        CLR     (SP)+           ; POP C OFF STACK
+        BR      FPRNT3          ; PRINT UNSIGNED
+
+FPRNT9:
+        CLR     (SP)+           ; POP STREAM
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
         RTS     PC              ; RETURN TO CALLER
 
 
