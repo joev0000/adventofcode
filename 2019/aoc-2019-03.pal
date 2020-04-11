@@ -36,11 +36,17 @@ START:  MOV     #.,SP           ; SET UP STACK
                                 ;  2(SP): END OF PATH1
                                 ;  0(SP): END OF PATH2
 
+        MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
+        MOV     #BANNER,-(SP)   ; S <- BANNER
+        JSR     PC,FPUTS        ; FPUTS(S, STREAM)
+        ADD     #4,SP           ; CLEAN UP STACK
+
         MOV     #PTIN,-(SP)     ; PUSH PTIN STREAM
         MOV     #PATH1,-(SP)    ; PUSH PATH1
         JSR     PC,PARSE        ; PARSE THE PATH
         ADD     #4,SP           ; CLEAN UP STACK
         SUB     #PATH1,R0       ; R0 <- LENGTH OF PATH1
+        SUB     #2,R0           ; POINT TO THE LAST ENTRY
         MOV     R0,2(SP)        ; SAVE THE LENGTH OF PATH1
 
         MOV     #PTIN,-(SP)     ; PUSH PTIN STREAM
@@ -48,6 +54,7 @@ START:  MOV     #.,SP           ; SET UP STACK
         JSR     PC,PARSE        ; PARSE THE PATH
         ADD     #4,SP           ; CLEAN UP STACK
         SUB     #PATH2,R0       ; R0 <- LENGTH OF PATH2
+        SUB     #2,R0           ; POINT TO THE LAST ENTRY
         MOV     R0,(SP)         ; SAVE THE LENGTH OF PATH2
 
         ; 0,x0,y0,x1,y1,x2,y2
@@ -61,6 +68,8 @@ START:  MOV     #.,SP           ; SET UP STACK
         ; Check horizontals of PATH1 vs. verticals of PATH2
         ; Check verticals of PATH1 vs. horizontals of PATH2
         ; Compare lower value vs. higher value.
+
+        MOV     #077777,R3      ; R3 <- SHORTEST MANHATTAN DISTANCE
 
         MOV     #2,R5           ; R5 <- PATH2 START OFFSET
         MOV     #2,R1           ; R1 <- INDEX IN PATH1
@@ -104,19 +113,32 @@ L4:
         CMP     PATH1(R1),12(SP); IS PATH1(R1) <= PATH2+2(R2)?
         BGT     L6              ; IF NOT, NO INTERSECTION
 
-        ; PRINT MATCH COORDINATES
+        TST     PATH1(R1)       ; IS PATH1(R1) ZERO?
+        BNE     L7              ; IF NOT, CONTINUE
+        TST     PATH2(R2)       ; IS PATH2(R2) ZERO?
+        BEQ     L6              ; IF SO, WE'RE AT (0,0), SO NO MATCH
+L7:
+;       ; PRINT MATCH COORDINATES
 
-        TST     R5              ; IS PATH1 THE HORIZONTAL ELEMENT?
-        BNE     START1          ; NO, SKIP AHEAD
-        MOV     PATH1(R1),-(SP) ; ARG1 <- PATH1(R1)
-        MOV     PATH2(R2),-(SP) ; ARG0 <- PATH2(R2)
-        BR      START2          ; SKIP AHEAD
-START1: MOV     PATH2(R2),-(SP) ; ARG1 <- PATH2(R2)
-        MOV     PATH1(R1),-(SP) ; ARG0 <- PATH1(R1)
-START2: MOV     #COORDS,-(SP)   ; FORMAT <- COORDS
-        MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
-        JSR     PC,FPRNTF       ; FPRNTF(STREAM, FORMAT, ...)
-        ADD     #10,SP          ; CLEAN UP STACK
+;       TST     R5              ; IS PATH1 THE HORIZONTAL ELEMENT?
+;       BNE     START1          ; NO, SKIP AHEAD
+;       MOV     PATH1(R1),-(SP) ; ARG1 <- PATH1(R1)
+;       MOV     PATH2(R2),-(SP) ; ARG0 <- PATH2(R2)
+;       BR      START2          ; SKIP AHEAD
+;START1:MOV     PATH2(R2),-(SP) ; ARG1 <- PATH2(R2)
+;       MOV     PATH1(R1),-(SP) ; ARG0 <- PATH1(R1)
+;START2:MOV     #COORDS,-(SP)   ; FORMAT <- COORDS
+;       MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
+;       JSR     PC,FPRNTF       ; FPRNTF(STREAM, FORMAT, ...)
+;       ADD     #10,SP          ; CLEAN UP STACK
+
+        MOV     PATH1(R1),-(SP) ; PUSH FIRST COORD
+        MOV     PATH2(R2),-(SP) ; PUSH SECOND COORD
+        JSR     PC,DIST         ; DIST(X,Y)
+        ADD     #4,SP           ; CLEAN UP STACK
+        CMP     R0,R3           ; IS DISTANCE LESS THAT LOWEST?
+        BGT     L6              ; IF NOT, SKIP
+        MOV     R0,R3           ; WE HAVE A NEW LOWEST DISTANCE
 
 L6:
         ADD     #4,R2           ; NEXT PARALLEL ELEMENT IN PATH2
@@ -127,13 +149,24 @@ L3:
         ADD     #2,R5           ;   USING R5 = 2 - R5
         BR      L1              ; NEXT ELEMENT IN PATH1
 L9:
+        MOV     R3,-(SP)        ; ARG0 <- R3
+        MOV     #PART1,-(SP)    ; FORMAT <- PART1
+        MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
+        JSR     PC,FPRNTF       ; FPRNTF(STREAM, FORMAT, ...)
+        ADD     #6,SP           ; CLEAN UP STACK
+
         HALT                    ; PROGRAM COMPLETE
-        BR      START           ; RESTART ON CONTINUE
+        JMP     START           ; RESTART ON CONTINUE
 
-COORDS:
-        .ASCII  /(%i,%i)/
-        .BYTE 15,12,0
+;COORDS:
+;       .ASCII  /(%i,%i)/
+;       .BYTE 15,12,0
+BANNER: .ASCII  /ADVENT OF CODE 2019 DAY 3/
+        .BYTE   15,12,0
+PART1:  .ASCII  /PART 1: %u/
+        .BYTE   15,12,0
 
+        .EVEN
 ;
 ; PARSE(ADDRESS, STREAM) R0: ADDRESS END
 ;
@@ -198,6 +231,22 @@ PDONE:
         MOV     (SP)+,R4        ; RESTORE R4
         MOV     (SP)+,R3        ; RESTORE R3
         MOV     (SP)+,R2        ; RESTORE R2
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; DIST(X,Y)
+;
+; RETURN THE MANHATTAN DISTANCE BETWEEN TWO SIGNED INTS
+;
+DIST:
+        TST     2(SP)           ; CHECK X
+        BPL     DIST1           ; IF POSITIVE, SKIP
+        NEG     2(SP)           ; NEGATE IT
+DIST1:  TST     4(SP)           ; CHECK Y
+        BPL     DIST2           ; IF POSITIVE, SKIP
+        NEG     4(SP)           ; NEGATE IT
+DIST2:  MOV     2(SP),R0        ; R0 <- X
+        ADD     4(SP),R0        ; R0 <- X + Y
         RTS     PC              ; RETURN TO CALLER
 
 PATH1:
