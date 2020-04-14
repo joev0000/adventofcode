@@ -48,8 +48,14 @@ EXPECT "*S " ECHO >> Setting PAL-11A options; SEND AFTER=20000,"H\r\n"; CONT
 EXPECT "*B " SEND AFTER=20000,"H/E\r\n"; CONT
 EXPECT "*L " SEND AFTER=20000,"H\r\n"; CONT
 EXPECT "*T " SEND AFTER=20000,"H/3\r\n"; ATTACH PTR %1.pal; ECHO >> Running first pass; CONT
+EXPECT " EOF ?" ECHO >> Attaching library tape; ATTACH PTR aoc-2019-lib.pal; SEND AFTER=20000,"\r\n"; CONT
+EXPECT " EOF ?" ECHO >> Attaching end-of-program tape; ATTACH PTR aoc-2019-end.pal; SEND AFTER=20000,"\r\n"; CONT
 EXPECT " END ?" ECHO >> Running second pass; ATTACH PTR %1.pal; ATTACH PTP -n %1.lda.ptap; SEND AFTER=20000,"\r\n"; CONT
+EXPECT " EOF ?" ECHO >> Attaching library tape; ATTACH PTR aoc-2019-lib.pal; SEND AFTER=20000,"\r\n"; CONT
+EXPECT " EOF ?" ECHO >> Attaching end-of-program tape; ATTACH PTR aoc-2019-end.pal; SEND AFTER=20000,"\r\n"; CONT
 EXPECT " END ?" ECHO >> Running third pass; ATTACH PTR %1.pal; ATTACH PTP -n %1.out; SEND AFTER=20000,"\r\n"; CONT
+EXPECT " EOF ?" ECHO >> Attaching library tape; ATTACH PTR aoc-2019-lib.pal; SEND AFTER=20000,"\r\n"; CONT
+EXPECT " EOF ?" ECHO >> Attaching end-of-program tape; ATTACH PTR aoc-2019-end.pal; SEND AFTER=20000,"\r\n"; CONT
 EXPECT "*S " ECHO >> Done.  Exiting; EXIT
 
 ECHO >> Start Absolute Loader to Load and Run PAL-11A (8K) paper tape
