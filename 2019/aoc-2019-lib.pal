@@ -337,33 +337,37 @@ FPUTS:
 FPRNTF:
         MOV     R2,-(SP)        ; SAVE R2
         MOV     R3,-(SP)        ; SAVE R3
-        MOV     6(SP),-(SP)     ; PUT STREAM AT SP, FOR FPUTC
+        MOV     R4,-(SP)        ; SAVE R4
+        MOV     10(SP),-(SP)    ; PUT STREAM AT SP, FOR FPUTC
 
-        MOV     12(SP),R2       ; R2 <- FORMAT
-        MOV     #14,R3          ; R3 <- POINTER TO NEXT ARG
+        MOV     14(SP),R2       ; R2 <- FORMAT
+        MOV     #16,R3          ; R3 <- POINTER TO NEXT ARG
         ADD     SP,R3
 
 FPRNT0:
         TSTB    (R2)            ; CHECK FOR NULL
         BEQ     FPRNT9          ; IF SO, WE'RE DONE
         CMPB    #'%,(R2)        ; CHECK FOR %
-        BEQ     FPRNT1          ; IF SO, GO TO FORMAT SECTION
+        BEQ     FPRN00          ; IF SO, GO TO FORMAT SECTION
         MOVB    (R2)+,-(SP)     ; C <- NEXT CHAR
         JSR     PC,FPUTC        ; FPUTC(C, STREAM)
         ADD     #2,SP           ; POP C OFF STACK
         BR      FPRNT0          ; NEXT CHAR
-FPRNT1:
-        INC     R2              ; NEXT CHAR
+
+FPRN00: CLR     R4              ; R4 <- CLEAR FLAGS
+FPRNT1: INC     R2              ; NEXT CHAR
         TSTB    (R2)            ; IS IT NULL?
         BEQ     FPRNT9          ; IF SO, WE'RE DONE
         CMPB    #'%,(R2)        ; IS IT %
         BEQ     FPRNT2          ; HANDLE PERCENT
         CMPB    #'u,(R2)        ; IS IT u
         BEQ     FPRNT3          ; HANDLE UNSIGNED INT IN DECIMAL
-        CMPB    #'i,(R2)        ; IS IT u
+        CMPB    #'i,(R2)        ; IS IT i
         BEQ     FPRNT4          ; HANDLE SIGNED INT IN DECIMAL
-        CMPB    #'d,(R2)        ; IS IT u
+        CMPB    #'d,(R2)        ; IS IT d
         BEQ     FPRNT4          ; HANDLE SIGNED INT IN DECIMAL
+        CMPB    #'l,(R2)        ; IS IT l
+        BEQ     FPRNT5          ; HANDLE L LENGTH MODIFIER
         ; UNKNOWN FORMAT
         INC     R2              ; INC POINTER
         BR      FPRNT0          ; NEXT CHAR
@@ -376,9 +380,14 @@ FPRNT2:
         BR      FPRNT0          ; NEXT CHAR
 
 FPRNT3:
-        MOV     (R3)+,-(SP)     ; LO <- ARG
-        CLR     -(SP)           ; HI <- ZERO
-        JSR     PC,FU3210       ; FU3210(HI,LO,STREAM)
+        SUB     #4,SP           ; MAKE SPACE FOR TWO WORDS
+        BIT     #1,R4           ; IS THE LENGTH MODIFIER SET?
+        BNE     FPRN30          ; YES, SKIP AHEAD TO PUSH HI
+        CLR     (SP)            ; HI <- 0
+        BR      FPRN31          ; MOVE ALONG
+FPRN30: MOV     (R3)+,(SP)      ; HI <- ARG
+FPRN31: MOV     (R3)+,2(SP)     ; LO <- ARG
+        JSR     PC,FU3210       ; FU3210(HI, LO, STREAM)
         ADD     #4,SP           ; POP HI AND LO OFF STACK
         INC     R2              ; INC FORMAT POINTER
         BR      FPRNT0          ; NEXT CHAR
@@ -391,8 +400,12 @@ FPRNT4:
         CLR     (SP)+           ; POP C OFF STACK
         BR      FPRNT3          ; PRINT UNSIGNED
 
+FPRNT5:
+        BIS     #1,R4           ; SET THE L BIT
+        BR      FPRNT1          ; NEXT CONVERSION SPECIFIER
 FPRNT9:
         CLR     (SP)+           ; POP STREAM
+        MOV     (SP)+,R4        ; RESTORE R4
         MOV     (SP)+,R3        ; RESTORE R3
         MOV     (SP)+,R2        ; RESTORE R2
         RTS     PC              ; RETURN TO CALLER
