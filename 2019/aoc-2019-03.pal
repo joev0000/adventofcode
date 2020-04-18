@@ -143,33 +143,34 @@ L7:
         MOV     R0,14(SP)       ; WE HAVE A NEW LOWEST DISTANCE
 
 L71:    ; CHECK TO SEE IF IT'S THE SHORTEST PATH
-        ; ADD THE DISTANCE FROM THE LAST VERTEX
-        MOV     PATH1(R1),-(SP)
-        MOV     PATH2-2(R2),-(SP)
-        JSR     PC,ADIFF
-        ADD     #4,SP
-        ADD     R0,22(SP)
-        ADC     24(SP)
+        MOV     26(SP),R3       ; R3 <- LO(PATH2 LENGTH)
+        MOV     30(SP),R4       ; R4 <- HI(PATH2 LEGNTH)
+        ADD     22(SP),R3       ; ADD LO(PATH1 LENGTH) TO R3
+        ADC     R4              ; ADD ANY CARRY TO R4
+        ADD     24(SP),R4       ; ADD HI(PATH1 LENGTH) TO R4
 
-        MOV     PATH2(R2),-(SP)
-        MOV     PATH1-2(R1),-(SP)
-        JSR     PC,ADIFF
-        ADD     #4,SP
-        ADD     R0,26(SP)
-        ADC     30(SP)
+        ; ADD THE DISTANCE FROM THE LAST PATH2 VERTEX
+        MOV     PATH1(R1),-(SP) ; X1 <- PATH1(R1)
+        MOV     PATH2-2(R2),-(SP) ; X0 <- PATH2-2(R2)
+        JSR     PC,ADIFF        ; ADIFF(X0, X1)
+        ADD     #4,SP           ; CLEAN UP STACK
+        ADD     R0,R3           ; ADD DISTANCE TO R3
+        ADC     R4              ; ADD ANY CARRY TO R4
 
-        MOV     26(SP),R3
-        MOV     30(SP),R4
-        ADD     22(SP),R3
-        ADC     R4
-        ADD     24(SP),R4
-        CMP     R4,20(SP)
-        BHI     L6 ; NOT LOWEST
-        CMP     R3,16(SP)
-        BHI     L6 ; NOT LOWEST
-        MOV     R4,20(SP)
-        MOV     R3,16(SP)
+        ; ADD THE DISTANCE FROM THE LAST PATH1 VERTEX
+        MOV     PATH2(R2),-(SP) ; X1 <- PATH2(R2)
+        MOV     PATH1-2(R1),-(SP) ; X0 <- PATH1-2(R1)
+        JSR     PC,ADIFF        ; ADIFF(X0, X1)
+        ADD     #4,SP           ; CLEAN UP STACK
+        ADD     R0,R3           ; ADD DISTANCE TO R3
+        ADC     R4              ; ADD ANY CARRY TO R4
 
+        CMP     R4,20(SP)       ; IS R4 > HI(SHORTEST PATH LENGTH)
+        BHI     L6              ; IF SO, WE'RE NOT THE SHORTEST
+        CMP     R3,16(SP)       ; IS R3 > LO(SHORTEST PATH LENGTH)
+        BHI     L6              ; IF SO, WE'RE NOT THE SHORTEST
+        MOV     R4,20(SP)       ; STORE THE NEW HI(SHORTEST PATH LEN)
+        MOV     R3,16(SP)       ; STORE THE NEW LO(SHORTEST PATH LEN)
 
 L6:     ; MOVE ON TO NEXT PATH2 ELEMENT
         SUB     10(SP),12(SP)   ; 12(SP) IS THE LENGTH OF THE SEGMENT
@@ -203,8 +204,6 @@ L9:
         JSR     PC,FPRNTF       ; FPRNTF(STREAM, FORMAT, ...)
         ADD     #6,SP           ; CLEAN UP STACK
 
-; 34047 is too low.
-; 165119 is too high.
         MOV     16(SP),-(SP)    ; ARG0 <- HI(LOWEST PATH LENGTH)
         MOV     22(SP),-(SP)    ; ARG1 <- LO(LOWEST PATH LENGTH)
         MOV     #PART2,-(SP)    ; FORMAT <- PART2
