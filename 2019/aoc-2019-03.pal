@@ -28,8 +28,14 @@
         .=      1000            ; ASSEMBLE AT ADDRESS 1000
 START:  MOV     #.,SP           ; SET UP STACK
 
-        SUB     #20,SP          ; LOCALS
-                                ; 16(SP): LOWEST PATH LENGTH
+        MOV     SP,R0           ; STASH STACK POINTER
+        SUB     #32,SP          ; LOCALS
+                                ; 30(SP): HI(PATH2 LENGTH)
+                                ; 26(SP): LO(PATH2 LENGTH)
+                                ; 24(SP): HI(PATH1 LENGTH)
+                                ; 22(SP): LO(PATH1 LENGTH)
+                                ; 20(SP): HI(SHORTEST PATH LENGTH)
+                                ; 16(SP): LO(SHORTEST PATH LENGTH)
                                 ; 14(SP): LOWEST MANHATTAN DISTANCE
                                 ; 12(SP): PATH2+2(R2)
                                 ; 10(SP): PATH2-2(R2)
@@ -37,6 +43,10 @@ START:  MOV     #.,SP           ; SET UP STACK
                                 ;  4(SP): PATH1-2(R1)
                                 ;  2(SP): END OF PATH1
                                 ;  0(SP): END OF PATH2
+
+        CLR     -(R0)           ; INITIALIZE LOCAL
+        CMP     SP,R0           ; GOT THEM ALL?
+        BNE     .-4             ; NO, GO TO NEXT ONE
 
         MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
         MOV     #BANNER,-(SP)   ; S <- BANNER
@@ -71,17 +81,17 @@ START:  MOV     #.,SP           ; SET UP STACK
         ; Check verticals of PATH1 vs. horizontals of PATH2
         ; Compare lower value vs. higher value.
 
-        CLR     R3              ; R3 <- PATH1 LENGTH
-        CLR     R4              ; R4 <- PATH2 LENGTH
         MOV     #077777,14(SP)  ; 14(SP) <- SHORTEST MANHATTAN DISTANCE
-        MOV     #077777,16(SP)  ; 16(SP) <- SHORTEST PATH LENGTH
+        MOV     #177777,16(SP)  ; 16(SP) <- LO(SHORTEST PATH LENGTH)
+        MOV     #077777,20(SP)  ; 20(SP) <- HI(SHORTEST PATH LENGTH)
 
         MOV     #2,R5           ; R5 <- PATH2 START OFFSET
         MOV     #2,R1           ; R1 <- INDEX IN PATH1
 L1:
         CMP     R1,2(SP)        ; ARE WE AT THE END?
-        BGE     L9              ; IF SO, WE'RE DONE
-
+        BLT     L10             ; IF NOT, SKIP THE JUMP
+        JMP     L9              ; IF SO, JUMP TO THE END
+L10:
         ; LOAD PATH1 SEGMENT ENDS TO LOCALS
         MOV     PATH1-2(R1),4(SP)
         MOV     PATH1+2(R1),6(SP)
@@ -123,60 +133,96 @@ L4:
         TST     PATH2(R2)       ; IS PATH2(R2) ZERO?
         BEQ     L6              ; IF SO, WE'RE AT (0,0), SO NO MATCH
 L7:
-;       ; PRINT MATCH COORDINATES
-
-;       TST     R5              ; IS PATH1 THE HORIZONTAL ELEMENT?
-;       BNE     START1          ; NO, SKIP AHEAD
-;       MOV     PATH1(R1),-(SP) ; ARG1 <- PATH1(R1)
-;       MOV     PATH2(R2),-(SP) ; ARG0 <- PATH2(R2)
-;       BR      START2          ; SKIP AHEAD
-;START1:MOV     PATH2(R2),-(SP) ; ARG1 <- PATH2(R2)
-;       MOV     PATH1(R1),-(SP) ; ARG0 <- PATH1(R1)
-;START2:MOV     #COORDS,-(SP)   ; FORMAT <- COORDS
-;       MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
-;       JSR     PC,FPRNTF       ; FPRNTF(STREAM, FORMAT, ...)
-;       ADD     #10,SP          ; CLEAN UP STACK
-
+        ; WE HAVE A MATCH
         MOV     PATH1(R1),-(SP) ; PUSH FIRST COORD
         MOV     PATH2(R2),-(SP) ; PUSH SECOND COORD
         JSR     PC,DIST         ; DIST(X,Y)
         ADD     #4,SP           ; CLEAN UP STACK
         CMP     R0,14(SP)       ; IS DISTANCE LESS THAT LOWEST?
-        BGT     L6              ; IF NOT, SKIP
+        BGT     L71             ; IF NOT, SKIP
         MOV     R0,14(SP)       ; WE HAVE A NEW LOWEST DISTANCE
 
-L6:
-        ADD     #4,R2           ; NEXT PARALLEL ELEMENT IN PATH2
+L71:    ; CHECK TO SEE IF IT'S THE SHORTEST PATH
+        ; ADD THE DISTANCE FROM THE LAST VERTEX
+        MOV     PATH1(R1),-(SP)
+        MOV     PATH2-2(R2),-(SP)
+        JSR     PC,ADIFF
+        ADD     #4,SP
+        ADD     R0,22(SP)
+        ADC     24(SP)
+
+        MOV     PATH2(R2),-(SP)
+        MOV     PATH1-2(R1),-(SP)
+        JSR     PC,ADIFF
+        ADD     #4,SP
+        ADD     R0,26(SP)
+        ADC     30(SP)
+
+        MOV     26(SP),R3
+        MOV     30(SP),R4
+        ADD     22(SP),R3
+        ADC     R4
+        ADD     24(SP),R4
+        CMP     R4,20(SP)
+        BHI     L6 ; NOT LOWEST
+        CMP     R3,16(SP)
+        BHI     L6 ; NOT LOWEST
+        MOV     R4,20(SP)
+        MOV     R3,16(SP)
+
+
+L6:     ; MOVE ON TO NEXT PATH2 ELEMENT
+        SUB     10(SP),12(SP)   ; 12(SP) IS THE LENGTH OF THE SEGMENT
+        ADD     12(SP),26(SP)   ; ADD SEG LENGTH TO LO(PATH2 LENGTH)
+        ADC     30(SP)          ; ADD CARRY TO HI(PATH2 LENGTH)
+        ADD     #2,R2
+
+        MOV     PATH2-2(R2),-(SP) ; X1 <- PATH2-2(R2)
+        MOV     PATH2+2(R2),-(SP) ; X0 <- PATH2+2(R2)
+        JSR     PC,ADIFF        ; ADIFF(X0,X1)
+        ADD     #4,SP           ; CLEAN UP STACK
+        ADD     R0,26(SP)       ; ADD R0 TO LO(PATH2 LENGTH)
+        ADC     30(SP)          ; ADD CARRY TO HI(PATH2 LENGTH)
+        ADD     #2,R2           ; NEXT PARALLEL ELEMENT IN PATH2
         BR      L2              ; NEXT ELEMENT IN PATH2
 L3:
+        SUB     4(SP),6(SP)     ; 6(SP) IS THE SEGMENT LENGTH
+        ADD     6(SP),22(SP)    ; ADD SEG LENGTH TO LO(PATH1 LENGTH)
+        ADC     24(SP)          ; ADD CARRY TO HI(PATH1 LENGTH)
+        CLR     26(SP)          ; CLEAR LO(PATH2 LENGTH)
+        CLR     30(SP)          ; CLEAR HI(PATH2 LENGTH)
         ADD     #2,R1           ; INCREMENT PATH1 INDEX
         NEG     R5              ; TOGGLE PATH2 START OFFSET
         ADD     #2,R5           ;   USING R5 = 2 - R5
-        BR      L1              ; NEXT ELEMENT IN PATH1
+        JMP     L1              ; NEXT ELEMENT IN PATH1
 L9:
         MOV     14(SP),-(SP)    ; ARG0 <- LOWEST MANHATTAN DISTANCE
+
         MOV     #PART1,-(SP)    ; FORMAT <- PART1
         MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
         JSR     PC,FPRNTF       ; FPRNTF(STREAM, FORMAT, ...)
         ADD     #6,SP           ; CLEAN UP STACK
 
-        MOV     16(SP),-(SP)    ; ARG0 <- LOWEST PATH LENGTH
+; 34047 is too low.
+; 165119 is too high.
+        MOV     16(SP),-(SP)    ; ARG0 <- HI(LOWEST PATH LENGTH)
+        MOV     22(SP),-(SP)    ; ARG1 <- LO(LOWEST PATH LENGTH)
         MOV     #PART2,-(SP)    ; FORMAT <- PART2
         MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
         JSR     PC,FPRNTF       ; FPRNTF(STREAM, FORMAT, ...)
         ADD     #6,SP           ; CLEAN UP STACK
-        ADD     #20,SP          ; CLEAN UP LOCALS
+        ADD     #32,SP          ; CLEAN UP LOCALS
         HALT                    ; PROGRAM COMPLETE
         JMP     START           ; RESTART ON CONTINUE
 
-;COORDS:
-;       .ASCII  /(%i,%i)/
-;       .BYTE 15,12,0
+COORDS:
+       .ASCII  /(%i,%i)/
+       .BYTE 15,12,0
 BANNER: .ASCII  /ADVENT OF CODE 2019 DAY 3/
         .BYTE   15,12,0
 PART1:  .ASCII  /PART 1: %u/
         .BYTE   15,12,0
-PART2:  .ASCII  /PART 2: %u/
+PART2:  .ASCII  /PART 2: %lu/
         .BYTE   15,12,0
 
         .EVEN
@@ -261,6 +307,21 @@ DIST1:  TST     4(SP)           ; CHECK Y
 DIST2:  MOV     2(SP),R0        ; R0 <- X
         ADD     4(SP),R0        ; R0 <- X + Y
         RTS     PC              ; RETURN TO CALLER
+
+;
+; ADIFF(X0,X1)
+;
+; RETURN THE ABSOLUTE DIFFERENCE BETWEEN TWO SIGNED INTS
+; |X0 - X1|
+;
+ADIFF:  CMP     2(SP),4(SP)     ; COMPARE X0 AND X1
+        BGT     ADIFF1          ; IF X0 > X1, SKIP AHEAD
+        MOV     4(SP),R0        ; R0 <- X1
+        SUB     2(SP),R0        ; R0 <- X1 - X0
+        BR      ADIFF2          ; WE'RE DONE
+ADIFF1: MOV     2(SP),R0        ; R0 <- X0
+        SUB     4(SP),R0        ; R0 <- X0 - X1
+ADIFF2: RTS     PC              ; RETURN TO CALLER
 
 PATH1:
         .=.+2000
