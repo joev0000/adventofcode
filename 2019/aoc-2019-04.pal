@@ -28,48 +28,64 @@
         .=      1000            ; ASSEMBLE AT ADDRESS 1000
 START:  MOV     #.,SP           ; SET UP STACK
 
-        SUB     #4,SP           ; ALLOCATE SPACE FOR LOCALS
-                                ;  2(SP): HI(END OF RANGE)
-                                ;   (SP): LO(END OF RANGE)
+        SUB     #14,SP          ; ALLOCATE SPACE FOR LOCALS
+                                ; 13(SP): END OF RANGE: LEAST SIG
+                                ;    ...
+                                ;  6(SP): END OF RANGE: MOST SIG
+                                ;  5(SP): CURRENT: LEAST SIG
+                                ;   ...
+                                ;   (SP): CURRENT: MOST SIG
 
-        CLR     R4              ; R4 <- LO(COUNT OF MATCHING NUMBERS)
-        CLR     R5              ; R5 <- HI(COUNT OF MATCHING NUMBERS)
+        CLR     R4              ; R4 <- HI(COUNT OF MATCHING NUMBERS)
+        CLR     R5              ; R5 <- LO(COUNT OF MATCHING NUMBERS)
 
-        ; PARSE INPUT
+        MOV     SP,R1           ; R1 <- CURRENT: MOST SIG DIGIT
+        MOV     R1,R2           ; R2 <- CURRENT: MOST SIG DIGIT
+        ADD     #6,R2           ; R2 <- CURRENT: LEAST SIG DIGIT
         MOV     #PTIN,-(SP)     ; STREAM <- PTIN
-        JSR     PC,P10U32       ; P10U32(STREAM)
-        MOV     R0,R2           ; R2 <- HI(START OF RANGE)
-        MOV     R1,R3           ; R3 <- LO(START OF RANGE)
-        JSR     PC,FGETC        ; FGETC(STREAM)
-        JSR     PC,P10U32       ; P10U32(STREAM)
-        ADD     #2,SP           ; CLEAN UP STACK
-        MOV     R0,2(SP)        ; STORE HI(END OF RANGE)
-        MOV     R1,(SP)         ; STORE LO(END OF RANGE)
+L01:    JSR     PC,FGETC        ; FGETC(STREAM)
+        MOVB    R0,(R1)+        ; STORE DIGIT
+        CMP     R1,R2           ; ARE WE AT THE LEAST SIG DIGIT?
+        BNE     L01             ; NO, GET THE NEXT ONE
+        JSR     PC,FGETC        ; EAT THE HYPHEN
+        ADD     #6,R2           ; R2 <- END OF RANGE: LEAST SIG DIGIT
+L02:    JSR     PC,FGETC        ; FGETC(STREAM)
+        MOVB    R0,(R1)+        ; STORE DIGIT
+        CMP     R1,R2           ; ARE WE AT THE LEAST SIG DIGIT?
+        BNE     L02             ; NO, GET THE NEXT ONE
+        CLR     (SP)+           ; CLEAN UP STACK FROM FGETC CALLS
 
-L0:
-        CMP     R2,2(SP)        ; COMPARE HI(CURRENT), HI(END OF RANGE)
-        BLT     L1              ; IF IT'S LESS, WE'RE GOOD
-        CMP     R3,(SP)         ; COMPARE LO(CURRENT), LO(END OF RANGE)
-        BGT     L9              ; IF GREATER THAN, WE'RE DONE
-L1:
-        MOV     R3,-(SP)        ; LO <- LO(CURRENT)
-        MOV     R2,-(SP)        ; HI <- HI(CURRENT)
-        JSR     PC,TADJ         ; TADJ(HI,LO)
-        TST     R0              ; CHECK RESULT
-        BEQ     L8              ; IF ZERO, NO ADJACENCY, NEXT
-        JSR     PC,TNODEC       ; TNODEC(HI,LO)
-        TST     R0              ; CHECK RESULT
-        BEQ     L8              ; IF ZERO, DIGITS INCREASE, NEXT
+L1:     MOV     SP,-(SP)        ; MSD <- SP
+        JSR     PC,TADJ         ; TADJ(MSD)
+        BCS     L2              ; CARRY SET: NO MATCH
+        JSR     PC,TINCR        ; TINCR(MSD)
+        BCS     L2              ; CARRY SET: NO MATCH
 
-        INC     R5              ; WE FOUND ONE, INCREMENT LO(COUNT)
-        BNE     L8              ; IF WE DON'T CARRY, CONTINUE
+        INC     R5              ; INCREMENT LO(COUNT)
+        BEQ     L2              ; IF NO CARRY, SKIP
         INC     R4              ; INCREMENT HI(COUNT)
 
-L8:     ADD     #4,SP           ; CLEAN UP STACK
-        INC     R3              ; INCREMENT LO(CURRENT)
-        BNE     L0              ; IF WE DIDN'T CARRY, NEXT NUMBER
-        INC     R2              ; INCREMENT HI(CURRENT)
-        BR      L0              ; NEXT NUMBER
+L2:     CLR     (SP)+           ; CLEAN UP STACK
+        MOV     #5,R1           ; R1 <- CURRENT: LEAST SIG DIGIT
+        ADD     SP,R1           ;
+L3:     INCB    (R1)            ; INCREMENT THE DIGIT
+        CMPB    (R1),#'9        ; COMPARE IT WITH 9(ASCII)
+        BLE     L4              ; IF IT'S 9 OR LESS, CHECK RANGE
+        MOVB    #'0,(R1)        ; SET DIGIT TO 0(ASCII)
+        DEC     R1              ; CARRY: MOVE TO NEXT DIGIT
+        CMP     R1,SP           ; ARE WE DONE?
+        BEQ     L4              ; IF SO, CHECK RANGE
+        BR      L3              ; OTHERWISE, MOVE TO NEXT DIGIT
+
+        ; CHECK RANGE
+L4:     MOV     SP,R1           ; R1 <- CURRENT: LEAST SIG DIGIT
+        ADD     #4,R1           ;
+        MOV     SP,R2           ; R2 <- END OF RANGE: LEAST SIG DIGIT
+        ADD     #12,R2          ;
+L5:     CMP     (R1)-,(R2)-     ; COMPARE DIGITS
+        BNE     L1              ; IF NOT EQUAL, WE'RE NOT DONE YET
+        CMP     R1,SP           ; ARE WE AT THE MOST SIG DIGIT?
+        BNE     L5              ; NO, TRY NEXT DIGIT
 
 L9:
         MOV     #STDOUT,-(SP)   ; STREAM = STDOUT
@@ -90,61 +106,20 @@ L9:
         JMP     START           ; RESTART ON CONTINUE
 
 ;
-; TADJ(HI, LO): R0 <- 0 IF FALSE, 1 IF TRUE
+; TADJ(MOST SIGNIFICANT OF SIX ASCII DIGITS): CARRY SET IF NO MATCH
 ;
 ; TEST IF THERE ARE TWO ADJACENT DECIMAL DIGITS ARE THE SAME
 ;
 TADJ:
-        MOV     R1,-(SP)        ; SAVE R1
-        MOV     R2,-(SP)        ; SAVE R2
-        MOV     R3,-(SP)        ; SAVE R3
-        MOV     R4,-(SP)        ; SAVE R4
-
-        SUB     #4,SP           ; LOCALS
-                                ; 6(SP): LO(REMAINDER)
-                                ; 4(SP): HI(REMAINDER)
-                                ; 2(SP): LO(QUOTIENT)
-                                ;  (SP): HI(QUOTIENT)
-
-        MOV     22(SP),R4       ; R4 <- HI
-        MOV     24(SP),R3       ; R3 <- LO
-
-        CLR     R0              ; ASSUME FALSE
-        MOV     #6,R1           ; THERE ARE SIX DIGITS
-        MOV     #177777,R2      ; PREVIOUS DIGIT (INIT: -1)
-TADJ1:
-        MOV     SP,-(SP)        ; RESULT <- SP
-        MOV     #12,-(SP)       ; LO(DIVISOR) <- 10(10)
-        CLR     -(SP)           ; HI(DIVISOR) <- 0
-        MOV     R3,-(SP)        ; LO(DIVIDEND) <- LO
-        MOV     R4,-(SP)        ; HI(DIVIDEND) <- HI
-        JSR     PC,DIVU32       ; DIVU32(HI(DIV'D), LO(DIV'D),
-                                ;        HI(DIV'R), LO(DIV'R),
-                                ;        RESULT)
-        ADD     #12,SP          ; CLEAN UP STACK
-        CMP     6(SP),R2        ; IS REMAINDER THE SAME AS LAST ONE?
-        BEQ     TADJ8           ; YES, WE'RE DONE
-        MOV     6(SP),R2        ; IF NOT, SAVE THE DIGIT FOR NEXT TIME
-        MOV     (SP),R4         ; HI <- HI(QUOTIENT)
-        MOV     2(SP),R3        ; LO <- LO(QUOTIENT)
-
-        DEC     R1              ; DECREMENT COUNTER
-        BNE     TADJ1           ; IF NOT DONE, TRY NEXT DIGIT
-        BR      TADJ9           ; IF SO, WE'RE DONE
-TADJ8:  INC     R0              ; RETURN TRUE
-TADJ9:
-        MOV     (SP)+,R4        ; RESTORE R2
-        MOV     (SP)+,R3        ; RESTORE R2
-        MOV     (SP)+,R2        ; RESTORE R2
-        MOV     (SP)+,R1        ; RESTORE R1
+        SEC
         RTS     PC              ; RETURN TO CALLER
 
 ;
-; TNODEC(HI, LO): R0 <- 0 IF FALSE, 1 IF TRUE
+; TINCR(MOST SIGNIFICANT OF SIX ASCII DIGITS): CARRY SET IF NO MATCH
 ;
-; TEST IF DECIMAL DIGITS DO NOT INCREASE LEFT-TO-RIGHT
+; TEST IF DECIMAL DIGITS INCREASE LEFT-TO-RIGHT
 ;
-TNODEC:
+TINCR:
         RTS     PC              ; RETURN TO CALLER
 
 ;
