@@ -36,8 +36,7 @@ START:  MOV     #.,SP           ; SET UP STACK
                                 ;   ...
                                 ;   (SP): CURRENT: MOST SIG
 
-        CLR     R4              ; R4 <- HI(COUNT OF MATCHING NUMBERS)
-        CLR     R5              ; R5 <- LO(COUNT OF MATCHING NUMBERS)
+        CLR     R4              ; R4 <- COUNT OF MATCHING NUMBERS
 
         MOV     SP,R1           ; R1 <- CURRENT: MOST SIG DIGIT
         MOV     R1,R2           ; R2 <- CURRENT: MOST SIG DIGIT
@@ -55,45 +54,32 @@ L02:    JSR     PC,FGETC        ; FGETC(STREAM)
         BNE     L02             ; NO, GET THE NEXT ONE
         CLR     (SP)+           ; CLEAN UP STACK FROM FGETC CALLS
 
-L1:     MOV     SP,-(SP)        ; MSD <- SP
-        JSR     PC,TADJ         ; TADJ(MSD)
-        BCS     L2              ; CARRY SET: NO MATCH
-        JSR     PC,TINCR        ; TINCR(MSD)
-        BCS     L2              ; CARRY SET: NO MATCH
+L3:     MOV     SP,R0           ; MOVE SP TO R0 TO PREVENT MOV SP,-(SP)
+        MOV     R0,-(SP)        ; N <- MSD OF PASSWORD
+        JSR     PC,NEXTPW       ; NEXTPW(N)
+        CLR     (SP)+           ; CLEAN UP STACK
 
-        INC     R5              ; INCREMENT LO(COUNT)
-        BEQ     L2              ; IF NO CARRY, SKIP
-        INC     R4              ; INCREMENT HI(COUNT)
-
-L2:     CLR     (SP)+           ; CLEAN UP STACK
-        MOV     #5,R1           ; R1 <- CURRENT: LEAST SIG DIGIT
-        ADD     SP,R1           ;
-L3:     INCB    (R1)            ; INCREMENT THE DIGIT
-        CMPB    (R1),#'9        ; COMPARE IT WITH 9(ASCII)
-        BLE     L4              ; IF IT'S 9 OR LESS, CHECK RANGE
-        MOVB    #'0,(R1)        ; SET DIGIT TO 0(ASCII)
-        DEC     R1              ; CARRY: MOVE TO NEXT DIGIT
-        CMP     R1,SP           ; ARE WE DONE?
-        BEQ     L4              ; IF SO, CHECK RANGE
-        BR      L3              ; OTHERWISE, MOVE TO NEXT DIGIT
+        INC     R4              ; INCREMENT THE COUNT OF VALID PWS
 
         ; CHECK RANGE
-L4:     MOV     SP,R1           ; R1 <- CURRENT: LEAST SIG DIGIT
-        ADD     #4,R1           ;
+L4:     MOV     #6,R3
+        MOV     SP,R1           ; R1 <- CURRENT: LEAST SIG DIGIT
         MOV     SP,R2           ; R2 <- END OF RANGE: LEAST SIG DIGIT
-        ADD     #12,R2          ;
-L5:     CMP     (R1)-,(R2)-     ; COMPARE DIGITS
-        BNE     L1              ; IF NOT EQUAL, WE'RE NOT DONE YET
-        CMP     R1,SP           ; ARE WE AT THE MOST SIG DIGIT?
-        BNE     L5              ; NO, TRY NEXT DIGIT
+        ADD     #6,R2           ;
+L5:     CMPB    (R1)+,(R2)+     ; COMPARE DIGITS
+        BLT     L3              ; IF CURRENT < END, TRY NEXT PW
+        BGT     L9              ; IF CURRENT > END, WE'RE DONE
+        DEC     R3              ; IF CURRENT = END
+        BNE     L5              ;   TRY NEXT DIGIT
 
 L9:
+        DEC     R4              ; DECREMENT THE LAST COUNTED PW
+
         MOV     #STDOUT,-(SP)   ; STREAM = STDOUT
         MOV     #BANNER,-(SP)   ; S = BANNER
         JSR     PC,FPUTS        ; FPUTS(S, STREAM)
         ADD     #4,SP           ; CLEAN UP STACK
 
-        MOV     R5,-(SP)        ; ARG1 <- LO(COUNT)
         MOV     R4,-(SP)        ; ARG0 <- HI(COUNT)
         MOV     #PART1,-(SP)    ; FORMAT <- PART1
         MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
@@ -106,26 +92,93 @@ L9:
         JMP     START           ; RESTART ON CONTINUE
 
 ;
-; TADJ(MOST SIGNIFICANT OF SIX ASCII DIGITS): CARRY SET IF NO MATCH
+; NEXTPW(N)
 ;
-; TEST IF THERE ARE TWO ADJACENT DECIMAL DIGITS ARE THE SAME
+; SET N TO BE THE NEXT VALID PASSWORD AFTER N
 ;
-TADJ:
-        SEC
-        RTS     PC              ; RETURN TO CALLER
+; ALGORITHM:
+; 1. INCREMENT THE NUMBER
+; 2. ENFORCE THE "NON-DECREASING VALUES" RULE BY EXTENDING THE HIGHEST
+;    DIGIT ALL THE WAY TO THE RIGHT
+; 3. CHECK THE "AT LEAST ONE DUPLCIATE" RULE.  IF WE FIND A DUPLICATE,
+;    THEN WE'RE DONE
+;    OTHERWISE, FIND THE LAST NON-9 DIGIT, INCREMENT IT, AND EXTEND
+;    THE DIGIT TO THE RIGHT
+;
+NEXTPW:
+        MOV     R0,-(SP)        ; SAVE R0
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     #5,R0           ; SET R0 TO POINT TO THE LAST DIGIT
+        ADD     10(SP),R0       ;   OF N
 
-;
-; TINCR(MOST SIGNIFICANT OF SIX ASCII DIGITS): CARRY SET IF NO MATCH
-;
-; TEST IF DECIMAL DIGITS INCREASE LEFT-TO-RIGHT
-;
-TINCR:
+        ; INCREMENT THE NUMBER
+NEXT1:  INCB    (R0)            ; INCREMENT THE DIGIT
+        CMPB    (R0),#'9        ; COMPARE WITH 9(ASCII)
+        BLE     NEXT2           ; DONE INCREMENTING.
+        MOVB    #'0,(R0)        ; SET DIGIT TO 0(ASCII)
+        DEC     R0              ; POINT TO PREVIOUS DIGIT
+        CMP     R0,10(SP)       ; ARE WE PAST THE FIRST DIGIT?
+        BGE     NEXT1           ; NO, MOVE TO PREVIOUS DIGIT
+
+        ; ENFORCE "NON-DECREASING VALUES"
+NEXT2:
+        CLR     R2              ; R2 HOLDS THE LAST DIGIT
+        MOV     #5,R1           ; SET R1 TO POINT TO THE LAST DIGIT
+        ADD     10(SP),R1
+        MOV     10(SP),R0       ; SET R0 TO POINT TO THE FIRST DIGIT
+NEXT20: CMP     R0,R1           ; ARE WE AT THE LAST DIGIT?
+        BGT     NEXT3           ; YES, GO TO NEXT STEP
+        CMPB    (R0),R2         ; IS THE VALUE AT R0 LESS THAN R2?
+        BLT     NEXT21          ; IF SO, EXTEND IT TO THE RIGHT
+        MOVB    (R0)+,R2        ; OTHERWISE, WE FOUND A LARGER DIGIT
+        BR      NEXT20          ; MOVE ON TO THE NEXT DIGIT
+NEXT21: MOVB    R2,(R0)+        ; EXTEND THE LARGEST DIGIT TO THE RIGHT
+        CMP     R0,R1           ; ARE WE AT THE END?
+        BLE     NEXT21          ; NO, GO TO THE NEXT DIGIT
+
+        ; CHECK THE "AT LEAST ONE DUPLICATE" RULE
+NEXT3:
+        MOV     #5,R1           ; SET R1 TO POINT TO THE LAST DIGIT
+        ADD     10(SP),R1
+        MOV     10(SP),R0       ; SET R0 TO POINT TO THE FIRST DIGIT
+        MOVB    (R0)+,R2        ; STASH THE DIGIT VALUE IN R2
+NEXT30: CMP     R0,R1           ; ARE WE AT THE END?
+        BGT     NEXT4           ; YES, WE DIDN'T FIND A DUPLICATE
+        CMPB    (R0),R2         ; IS THE DIGIT THE SAME AS THE PREVIOUS
+        BEQ     NEXT5           ; YES, WE FOUND A DUPLICATE, WE'RE DONE
+        MOVB    (R0)+,R2        ; STASH THE DIGIT VALUE IN R2
+        BR      NEXT30          ; AND TRY THE NEXT DIGIT
+
+        ; INCREMENT THE LAST NON-9 DIGIT, AND EXTEND
+NEXT4:
+        MOV     #4,R0           ; SET R0 TO POINT TO SECOND TO LAST
+        ADD     10(SP),R0       ;   DIGIT
+        MOV     #5,R1           ; SET R1 TO
+        ADD     10(SP),R1       ;   THE LAST DIGIT
+NEXT40: CMPB    (R0),#'9        ; IS THE DIGIT LESS THAN 9?
+        BLT     NEXT41          ; IF SO, MOVE TO EXTEND
+        DEC     R0              ; IT'S 9, TRY PREVIOUS DIGIT
+        BR      NEXT40          ; NEXT!
+NEXT41: INCB    (R0)            ; INCREMENT THE DIGIT
+        MOVB    (R0),R2         ; STASH IT
+        INC     R0              ; MOVE TO THE NEXT DIGIT
+NEXT42: CMP     R0,R1           ; ARE WE AT THE END?
+        BGT     NEXT5           ; YES, WE'RE DONE
+        MOVB    R2,(R0)+        ; NO, EXTEND THE STASHED DIGIT
+        BR      NEXT42          ; MOVE TO THE NEXT ONE
+
+        ; WE HAVE THE NEXT CANDIDATE PW
+NEXT5:
+        MOV     (SP)+,R2        ; RESTORE R2
+        MOV     (SP)+,R1        ; RESTORE R1
+        MOV     (SP)+,R0        ; RESTORE R0
         RTS     PC              ; RETURN TO CALLER
 
 ;
 ; STATIC DATA
 ;
 BANNER: .ASCII  /ADVENT OF CODE 2019 DAY 4/
-        .BYTE   15,12,0         ; CR,LF
-PART1:  .ASCII  /PART 1: %lu/
+CRLF:   .BYTE   15,12,0         ; CR,LF
+PART1:  .ASCII  /PART 1: %u/
         .BYTE   15,12,0
