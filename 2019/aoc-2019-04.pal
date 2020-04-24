@@ -37,6 +37,8 @@ START:  MOV     #.,SP           ; SET UP STACK
                                 ;   (SP): CURRENT: MOST SIG
 
         CLR     R4              ; R4 <- COUNT OF MATCHING NUMBERS
+        CLR     R5              ; R5 <- COUNT OF NUMBERS THAT FOLLOW
+                                ;         THE "ONLY 2 CONSECUTIVE" RULE
 
         MOV     SP,R1           ; R1 <- CURRENT: MOST SIG DIGIT
         MOV     R1,R2           ; R2 <- CURRENT: MOST SIG DIGIT
@@ -57,9 +59,12 @@ L02:    JSR     PC,FGETC        ; FGETC(STREAM)
 L3:     MOV     SP,R0           ; MOVE SP TO R0 TO PREVENT MOV SP,-(SP)
         MOV     R0,-(SP)        ; N <- MSD OF PASSWORD
         JSR     PC,NEXTPW       ; NEXTPW(N)
+        JSR     PC,ONLY2        ; ONLY2(N)
         CLR     (SP)+           ; CLEAN UP STACK
 
         INC     R4              ; INCREMENT THE COUNT OF VALID PWS
+        ADD     R0,R5           ; INCREMENT THE COUNT OF PWS THAT
+                                ;   FOLLOW THE "GROUP OF ONLY 2" RULE
 
         ; CHECK RANGE
 L4:     MOV     #6,R3
@@ -80,8 +85,14 @@ L9:
         JSR     PC,FPUTS        ; FPUTS(S, STREAM)
         ADD     #4,SP           ; CLEAN UP STACK
 
-        MOV     R4,-(SP)        ; ARG0 <- HI(COUNT)
+        MOV     R4,-(SP)        ; ARG0 <- COUNT
         MOV     #PART1,-(SP)    ; FORMAT <- PART1
+        MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
+        JSR     PC,FPRNTF       ; FPRNTF(STREAM, FORMAT, ...)
+        ADD     #10,SP          ; CLEAN UP STACK
+
+        MOV     R5,-(SP)        ; ARG0 <- COUNT
+        MOV     #PART2,-(SP)    ; FORMAT <- PART2
         MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
         JSR     PC,FPRNTF       ; FPRNTF(STREAM, FORMAT, ...)
         ADD     #10,SP          ; CLEAN UP STACK
@@ -176,9 +187,49 @@ NEXT5:
         RTS     PC              ; RETURN TO CALLER
 
 ;
+; ONLY2(N): R0 <- 1 IF RULE SATISFIED, 0 IF NOT
+;
+; CHECK IF NUMBER SATISFIES "ONLY TWO CONSECUTIVE MATCHING DIGITS" RULE
+;
+ONLY2:
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     R4,-(SP)        ; SAVE R4
+
+        CLR     R0
+        MOV     12(SP),R1       ; R1 <- POINTER TO FIRST DIGIT
+        MOVB    (R1)+,R2        ; R2 <- VALUE OF FIRST DIGIT
+        MOV     #5,R3           ; R3 <- DIGITS LEFT TO CHECK
+        MOV     #1,R4           ; R4 <- CURRENT STREAK
+
+ONLY21: CMPB    (R1),R2         ; IS THE DIGIT THE SAME AS THE LAST?
+        BNE     ONLY22          ; NO. SKIP
+        INC     R4              ; INCREMENT THE STREAK
+        BR      ONLY23          ; UPDATE COUNTERS
+ONLY22: CMP     #2,R4           ; STREAK ENDED AT 2?
+        BEQ     ONLY28          ; YES, WE'RE DONE
+        MOV     #1,R4           ; RESET STREAK TO 1
+        MOVB    (R1),R2         ; COPY DIGIT TO BE THE CURRENT
+ONLY23: INC     R1              ; MOVE TO NEXT DIGIT
+        DEC     R3              ; DECREASE THE DIGITS LEFT TO COUNT
+        BEQ     ONLY27          ; IF WE'RE DONE, DON'T LOOP
+        BR      ONLY21          ; TRY THE NEXT DIGIT
+ONLY27: CMP     #2,R4           ; IS THE ENDING STREAK 2?
+        BNE     ONLY29          ; IF NOT, SKIP AHEAD
+ONLY28: INC     R0              ; WE FOUND ONE!
+ONLY29: MOV     (SP)+,R4        ; RESTORE R4
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        MOV     (SP)+,R1        ; RESTORE R1
+        RTS     PC              ; RETURN TO CALLER
+
+;
 ; STATIC DATA
 ;
 BANNER: .ASCII  /ADVENT OF CODE 2019 DAY 4/
 CRLF:   .BYTE   15,12,0         ; CR,LF
 PART1:  .ASCII  /PART 1: %u/
+        .BYTE   15,12,0
+PART2:  .ASCII  /PART 2: %u/
         .BYTE   15,12,0
