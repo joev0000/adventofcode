@@ -1,0 +1,324 @@
+; ADVENT OF CODE 2019: DAY 5
+; SUNNY WITH A CHANCE OF ASTEROIDS
+;
+; THIS PROGRAM CAN BE ASSEMBLED BY PAL-11A AND CAN BE RUN ON ANY
+; PDP-11 SYSTEM WITH A HIGH-SPEED PAPER TAPE READER.
+;
+; INPUT:  PAPER TAPE
+; OUTPUT: TTY
+;
+; START ADDRESS: 1000
+;
+
+;
+; SET UP REGISTER AND DEVICE LABELS
+;
+        R0=     %0              ; REGISTER 0
+        R1=     %1              ; REGISTER 1
+        R2=     %2              ; REGISTER 2
+        R3=     %3              ; REGISTER 3
+        R4=     %4              ; REGISTER 4
+        R5=     %5              ; REGISTER 5
+        SP=     %6              ; STACK POINTER
+        PC=     %7              ; PROGRAM COUNTER
+
+;
+; START OF PROGRAM
+;
+        .=      1000            ; ASSEMBLE AT ADDRESS 1000
+START:  MOV     #.,SP           ; SET UP STACK
+
+        MOV     #PTIN,-(SP)     ; STREAM <- PTIN
+        MOV     #MEM,-(SP)      ; MEM <- MEM
+        JSR     PC,ICLOAD       ; ICLOAD(MEM, STREAM)
+        ADD     #4,SP           ; CLEAN UP STACK
+
+        CLR     R0              ; PC <- 0
+        MOV     #STDOUT,-(SP)   ; OUTSTR <- STDOUT
+        MOV     #STDIN,-(SP)    ; INSTR <- STDIN
+        MOV     #MEM,-(SP)      ; MEM <- MEM
+        MOV     R0,-(SP)        ; PC <- R0
+L0:     JSR     PC,ICEXEC       ; ICEXEC(PC, MEM, INSTR, OUTSTR)
+        TST     R0              ; CHECK R0
+        BMI     L99             ; NEXT INSTR < 0 MEANS HALT
+        MOV     R0,(SP)         ; SET PC FOR NEXT INSTRUCTION
+        BR      L0              ; RUN NEXT INSTRUCTION
+L99:    ADD     #10,SP          ; CLEAN UP STACK
+
+        HALT                    ; DONE
+        JMP     START           ; START AT THE TOP
+
+;
+; ICLOAD(MEM, STREAM): R0 = END
+;
+; LOAD INTCODE PROGRAM FROM STREAM INTO MEMORY
+;
+ICLOAD:
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     10(SP),R2       ; R2 <- MEM
+        MOV     12(SP),R3       ; R3 <- STREAM
+
+        MOV     R3,-(SP)        ; STREAM <- R3
+ICLOA1: JSR     PC,FSTRTL       ; FSTRTL(STREAM)
+        MOV     R1,(R2)+        ; STORE RESULT LO
+        JSR     PC,FGETC        ; FGETC(STREAM)
+        CMP     #',,R0          ; IS IT A COMMA?
+        BEQ     ICLOA1          ;   IF SO, LOAD NEXT VALUE
+        CLR     (SP)+           ; CLEAN UP STACK
+
+        MOV     R2,R0           ; RETURN LAST MEMORY LOCATION + 1
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        MOV     (SP)+,R1        ; RESTORE R1
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; ICEXEC(PC,MEM,INSTR,OUTSTR): R0 = NEXT PC
+;
+; EXECUTE THE INSTRUCTION AT PC.  RETURN THE NEXT VALUE OF PC.
+;
+; OPCODES:
+;   1: ADD :  A + B -> C
+;   2: MUL :  A * B -> C
+;   3: INP :  -> A
+;   4: OUTP:  A ->
+;  99: HALT
+ICEXEC:
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     R4,-(SP)        ; SAVE R4
+        MOV     R5,-(SP)        ; SAVE R5
+
+        MOV     14(SP),R5       ; R5 <- PC
+        MOV     16(SP),R2       ; R2 <- MEM
+        MOV     #1,-(SP)        ; MODE <- IMMEDIATE
+        MOV     R2,-(SP)        ; MEM <- R2
+        MOV     R5,-(SP)        ; PC <- R5
+        JSR     PC,ICREAD       ; ICREAD(PC,MEM)
+        ADD     #6,SP           ; CLEAN UP STACK
+        INC     R5              ; INCREMENT PC
+
+        MOV     #144,-(SP)      ; DIVISOR <- 100(10)
+        MOV     R0,-(SP)        ; DIVIDEND <- INSTRUCTION
+        JSR     PC,DIVU16       ; DIVU16(DIVIDEND, DIVISOR)
+        ADD     #4,SP           ; CLEAN UP STACK
+
+        CMP     R1,#4           ; IS THE OPCODE > 4?
+        BLE     .+4             ;   IF SO, SKIP
+        CLR     R1              ; SET OPCODE TO 0 (HALT)
+        ASL     R1              ; MULTIPLY OPCODE BY 2 TO GET OFFSET
+        MOV     R0,-(SP)        ; MODES <- R0 (QUOTIENT)
+        MOV     R2,-(SP)        ; MEM <- R2
+        MOV     R5,-(SP)        ; PC <- R5
+        JSR     PC,@OPCODE(R1)  ; (OPCODE)(PC,MEM,MODES)
+        ADD     #6,SP           ; CLEAN UP STACK
+
+        MOV     (SP)+,R5        ; RESTORE R5
+        MOV     (SP)+,R4        ; RESTORE R4
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        MOV     (SP)+,R1        ; RESTORE R1
+        RTS     PC              ; RETURN TO CALLER
+;
+; ICREAD(PC,MEM,MODE)
+;
+ICREAD:
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     R2,-(SP)        ; SAVE R2
+
+        MOV     6(SP),R1        ; R1 <- PC
+        MOV     10(SP),R2       ; R2 <- MEM
+
+        ASL     R1              ; CONVERT PC TO OFFSET
+        ADD     R1,R2           ; ADD OFFSET TO MEM
+        MOV     (R2),R0         ; GET THE VALUE
+        TST     12(SP)          ; CHECK THE MODE
+        BNE     ICREA9          ; IF 1, IMMEDIATE, WE'RE DONE
+        MOV     R0,R1           ; POSITION MODE
+        ASL     R1              ; CONVERT ADDRESS TO OFFSET
+        ADD     R1,R2           ; ADD OFFSET TO MEM
+        MOV     (R2),R0         ; GET THE VALUE
+
+ICREA9: MOV     (SP)+,R2        ; RESTORE R2
+        MOV     (SP)+,R1        ; RESTORE R1
+        RTS     PC              ; RETURN TO CALLER
+;
+; ICWRIT(PC, MEM, VALUE)
+;
+ICWRIT:
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     R2,-(SP)        ; SAVE R2
+
+        MOV     6(SP),R1        ; R1 <- PC
+        MOV     10(SP),R2       ; R2 <- MEM
+
+        ASL     R1              ; CONVERT PC TO OFFSET
+        ADD     R1,R2           ; ADD OFFSET TO MEM
+        MOV     12(SP),(R2)     ; SET THE VALUE
+        MOV     (SP)+,R2        ; RESTORE R2
+        MOV     (SP)+,R1        ; RESTORE R1
+        RTS     PC              ; RETURN TO CALLER
+
+OPCODE: .WORD   ICHALT          ; OPCODE 0 (OPCODE > 4)
+        .WORD   ICADD           ; OPCODE 1
+        .WORD   ICMUL           ; OPCODE 2
+        .WORD   ICIN            ; OPCODE 3
+        .WORD   ICOUT           ; OPCODE 4
+
+;
+; ICHALT(PC,MEM,MODES)
+;
+ICHALT:
+        MOV     #177777,R0      ; NEXT PC IS -1
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; ICADD(PC,MEM,MODES)
+;
+ICADD:
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     R4,-(SP)        ; SAVE R4
+        MOV     R5,-(SP)        ; SAVE R5
+
+        MOV     14(SP),R5       ; R5 <- PC
+        MOV     16(SP),R2       ; R2 <- MEM
+        MOV     20(SP),R3       ; R3 <- MODES
+
+        MOV     #12,-(SP)       ; DIVIDEND <- 10(10)
+        MOV     R3,-(SP)        ; DIVISOR <- MODES
+        JSR     PC,DIVU16       ; DIVU16(DIVISOR,DIVIDEND)
+        ADD     #4,SP           ; CLEAN UP STACK
+        MOV     R0,R3           ; STORE REMAINING MODES
+
+        MOV     R1,-(SP)        ; MODE <- REMAINDER
+        MOV     R2,-(SP)        ; MEM <- MEM
+        MOV     R5,-(SP)        ; PC <- PC
+        JSR     PC,ICREAD       ; ICREAD(PC,MEM)
+        ADD     #6,SP           ; CLEAN UP STACK
+        INC     R5              ; INCREMENT PC
+        MOV     R0,R4           ; R4 <- ADDEND
+
+        MOV     #12,-(SP)       ; DIVIDEND <- 10(10)
+        MOV     R3,-(SP)        ; DIVISOR <- MODES
+        JSR     PC,DIVU16       ; DIVU16(DIVISOR,DIVIDEND)
+        ADD     #4,SP           ; CLEAN UP STACK
+        MOV     R0,R3           ; STORE REMAINING MODES
+
+        MOV     R1,-(SP)        ; MODE <- REMAINDER
+        MOV     R2,-(SP)        ; MEM <- MEM
+        MOV     R5,-(SP)        ; PC <- PC
+        JSR     PC,ICREAD       ; ICREAD(PC,MEM)
+        ADD     #6,SP           ; CLEAN UP STACK
+        INC     R5              ; INCREMENT PC
+        ADD     R0,R4           ; R4 <- SUM
+
+        MOV     R4,-(SP)        ; VALUE <- SUM
+        MOV     R2,-(SP)        ; MEM <- MEM
+        MOV     R5,-(SP)        ; PC <- PC
+        JSR     PC,ICWRIT       ; ICWRIT(PC,MEM,VALUE)
+        ADD     #6,SP           ; CLEAN UP STACK
+        INC     R5              ; INCREMENT PC
+
+        MOV     R5,R0           ; RETURN NEXT PC
+
+        MOV     (SP)+,R5        ; RESTORE R5
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R4        ; RESTORE R4
+        MOV     (SP)+,R2        ; RESTORE R2
+        MOV     (SP)+,R1        ; RESTORE R1
+        RTS     PC              ; RETURN TO CALLER
+;
+; ICMUL(PC,MEM,MODES)
+;
+ICMUL:
+        RTS     PC              ; RETURN TO CALLER
+;
+; ICIN(PC,MEM,MODES)
+;
+ICIN:
+        RTS     PC              ; RETURN TO CALLER
+;
+; ICOUT(PC,MEM,MODES)
+;
+ICOUT:
+        RTS     PC              ; RETURN TO CALLER
+;
+; FSTRTL(STREAM) -> R0: HI, R1: LO
+;
+; CONVERT A SIGNED DECIMAL STRING TO A LONG INTEGER (DOUBLE WORD)
+;
+FSTRTL:
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     R4,-(SP)        ; SAVE R4
+        MOV     R5,-(SP)        ; SAVE R5
+
+                                ; LOCALS
+        CLR     -(SP)           ; (SP): NEGATIVE FLAG
+
+        MOV     14(SP),R2       ; R2 <- STREAM
+        CLR     R4              ; R4 <- HI
+        CLR     R5              ; R5 <- LO
+
+        MOV     R2,-(SP)        ; STREAM <- STREAM
+        JSR     PC,FGETC        ; FGETC(STREAM)
+        CLR     (SP)+           ; CLEAN UP STACK
+        CMP     #'+,R0          ; IF IT'S A PLUS
+        BEQ     FSTRT7          ;   SKIP IT, READ NEXT CHAR.
+        CMP     #'-,R0          ; IF IT'S NOT A MINUS
+        BNE     FSTRT1          ;   SKIP AHEAD
+        INC     (SP)            ; SET THE NEGATIVE FLAG
+        BR      FSTRT7          ; READ NEXT CHAR
+
+FSTRT1: CMP     #'0,R0          ; IF IT'S LESS THAN ZERO
+        BGT     FSTRT8          ;   WE'RE DONE
+        CMP     #'9,R0          ; IF IT'S GREATER THAN NINE
+        BLT     FSTRT8          ;   WE'RE DONE
+        SUB     #'0,R0          ; ASCII -> NUMBER
+        MOV     R0,R3           ; REMEMBER IT
+
+        MOV     #12,-(SP)       ; MULTIPLIER LO <- 10(10)
+        CLR     -(SP)           ; MULTIPLIER HI <- 0
+        MOV     R5,-(SP)        ; MULTIPLICAND LO <- R5
+        MOV     R4,-(SP)        ; MULTIPLICAND HI <- R4
+        JSR     PC,MUL32P       ; MUL32P(M'CAND HI, LO, M'PLIER HI, LO)
+        ADD     #10,SP          ; CLEAN UP STACK
+        MOV     R0,R4           ; R4 <- RESULT HI
+        MOV     R1,R5           ; R5 <- RESULT LO
+        ADD     R3,R5           ; ADD R3 TO RESULT LO
+        ADC     R4              ; ADD CARRY TO RESULT HI
+
+FSTRT7: MOV     R2,-(SP)        ; STREAM <- STREAM
+        JSR     PC,FGETC        ; FGETC(STREAM)
+        CLR     (SP)+           ; CLEAN UP STACK
+        BR      FSTRT1
+
+FSTRT8:
+        MOV     R2,-(SP)        ; STREAM <- STREAM
+        MOV     R0,-(SP)        ; C <- STREAM
+        JSR     PC,UNGETC       ; UNGETC(C, STREAM)
+        ADD     #4,SP           ; CLEAN UP STACK
+
+        TST     (SP)            ; CHECK THE NEGATIVE FLAG
+        BEQ     FSTRT9          ; NOT NEGATIVE, SKIP NEGATION
+        COM     R4              ; COMPLIMENT THE HI WORD
+        NEG     R5              ; TWO'S COMPLIMENT TO LO WORD
+
+FSTRT9:
+        MOV     R4,R0           ; SET RETURN VALUE HI
+        MOV     R5,R1           ; SET RETURN VALUE LO
+        CLR     (SP)+           ; CLEAN UP LOCAL
+        MOV     (SP)+,R5        ; RESTORE R5
+        MOV     (SP)+,R4        ; RESTORE R4
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        RTS     PC              ; RETURN TO CALLER
+
+        .EVEN
+MEM:    .=.+2000             ; 1000(10) MEMORY LOCATIONS
+
