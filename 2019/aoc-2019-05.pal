@@ -125,24 +125,38 @@ ICEXEC:
 ;
 ; ICREAD(PC,MEM,MODE)
 ;
+; IF MODE > 9, THE LAST DECIMAL DIGIT IS USED, THE REST STORED
+; BACK TO MODE PARAMETER ON THE STACK
 ICREAD:
         MOV     R1,-(SP)        ; SAVE R1
         MOV     R2,-(SP)        ; SAVE R2
+        MOV     R5,-(SP)        ; SAVE R5
 
-        MOV     6(SP),R1        ; R1 <- PC
-        MOV     10(SP),R2       ; R2 <- MEM
+        MOV     10(SP),R5       ; R5 <- PC
+        MOV     12(SP),R2       ; R2 <- MEM
+        MOV     14(SP),R1       ; R1 <- MODE
 
-        ASL     R1              ; CONVERT PC TO OFFSET
-        ADD     R1,R2           ; ADD OFFSET TO MEM
+        CMP     R1,#11          ; IS MODE <= 9?
+        BLE     ICREA1          ;   YES, SKIP AHEAD
+        MOV     #12,-(SP)       ; DIVIDEND <- 10(10)
+        MOV     16(SP),-(SP)    ; DIVISOR <- MODES
+        JSR     PC,DIVU16       ; DIVU16(DIVISOR,DIVIDEND)
+        ADD     #4,SP           ; CLEAN UP STACK
+        MOV     R0,14(SP)       ; STORE REMAINING MODES
+ICREA1:
+        ASL     R5              ; CONVERT PC TO OFFSET
+        ADD     R5,R2           ; ADD OFFSET TO MEM
         MOV     (R2),R0         ; GET THE VALUE
-        TST     12(SP)          ; CHECK THE MODE
+        TST     R1              ; CHECK THE MODE
         BNE     ICREA9          ; IF 1, IMMEDIATE, WE'RE DONE
-        MOV     R0,R1           ; POSITION MODE
-        ASL     R1              ; CONVERT ADDRESS TO OFFSET
-        ADD     R1,R2           ; ADD OFFSET TO MEM
+        MOV     R0,R5           ; POSITION MODE
+        ASL     R5              ; CONVERT ADDRESS TO OFFSET
+        ADD     R5,R2           ; ADD OFFSET TO MEM
         MOV     (R2),R0         ; GET THE VALUE
 
-ICREA9: MOV     (SP)+,R2        ; RESTORE R2
+ICREA9:
+        MOV     (SP)+,R5        ; RESTORE R5
+        MOV     (SP)+,R2        ; RESTORE R2
         MOV     (SP)+,R1        ; RESTORE R1
         RTS     PC              ; RETURN TO CALLER
 ;
@@ -179,43 +193,25 @@ ICHALT:
 ; ICADD(PC,MEM,MODES)
 ;
 ICADD:
-        MOV     R1,-(SP)        ; SAVE R1
         MOV     R2,-(SP)        ; SAVE R2
         MOV     R3,-(SP)        ; SAVE R3
         MOV     R4,-(SP)        ; SAVE R4
         MOV     R5,-(SP)        ; SAVE R5
 
-        MOV     14(SP),R5       ; R5 <- PC
-        MOV     16(SP),R2       ; R2 <- MEM
-        MOV     20(SP),R3       ; R3 <- MODES
+        MOV     12(SP),R5       ; R5 <- PC
+        MOV     14(SP),R2       ; R2 <- MEM
+        MOV     16(SP),R3       ; R3 <- MODES
 
-        MOV     #12,-(SP)       ; DIVIDEND <- 10(10)
-        MOV     R3,-(SP)        ; DIVISOR <- MODES
-        JSR     PC,DIVU16       ; DIVU16(DIVISOR,DIVIDEND)
-        ADD     #4,SP           ; CLEAN UP STACK
-        MOV     R0,R3           ; STORE REMAINING MODES
-
-        MOV     R1,-(SP)        ; MODE <- REMAINDER
+        MOV     R3,-(SP)        ; MODE <- MODES
         MOV     R2,-(SP)        ; MEM <- MEM
         MOV     R5,-(SP)        ; PC <- PC
-        JSR     PC,ICREAD       ; ICREAD(PC,MEM)
-        ADD     #6,SP           ; CLEAN UP STACK
-        INC     R5              ; INCREMENT PC
+        JSR     PC,ICREAD       ; ICREAD(PC,MEM,MODES)
+        INC     (SP)            ; INCREMENT PC ON STACK FOR NEXT READ
         MOV     R0,R4           ; R4 <- ADDEND
-
-        MOV     #12,-(SP)       ; DIVIDEND <- 10(10)
-        MOV     R3,-(SP)        ; DIVISOR <- MODES
-        JSR     PC,DIVU16       ; DIVU16(DIVISOR,DIVIDEND)
-        ADD     #4,SP           ; CLEAN UP STACK
-        MOV     R0,R3           ; STORE REMAINING MODES
-
-        MOV     R1,-(SP)        ; MODE <- REMAINDER
-        MOV     R2,-(SP)        ; MEM <- MEM
-        MOV     R5,-(SP)        ; PC <- PC
         JSR     PC,ICREAD       ; ICREAD(PC,MEM)
         ADD     #6,SP           ; CLEAN UP STACK
-        INC     R5              ; INCREMENT PC
         ADD     R0,R4           ; R4 <- SUM
+        ADD     #2,R5           ; INCREMENT THE PC BY 2
 
         MOV     R4,-(SP)        ; VALUE <- SUM
         MOV     R2,-(SP)        ; MEM <- MEM
@@ -230,7 +226,6 @@ ICADD:
         MOV     (SP)+,R3        ; RESTORE R3
         MOV     (SP)+,R4        ; RESTORE R4
         MOV     (SP)+,R2        ; RESTORE R2
-        MOV     (SP)+,R1        ; RESTORE R1
         RTS     PC              ; RETURN TO CALLER
 ;
 ; ICMUL(PC,MEM,MODES)
