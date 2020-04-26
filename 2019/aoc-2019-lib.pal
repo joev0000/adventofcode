@@ -394,8 +394,15 @@ FPRN31: MOV     (R3)+,2(SP)     ; LO <- ARG
 FPRNT4:
         TST     (R3)            ; IS IT NEGATIVE?
         BPL     FPRNT3          ; NO, PRINT UNSIGNED
+        BIT     #1,R4           ; IS THE LENGTH MODIFIER SET?
+        BNE     FPRN40          ; YES, SKIP AHEAD TO COMPLIMENT DW
         NEG     (R3)            ; NEGATE VALUE
-        MOV     #'-,-(SP)       ; C <- -
+        BR      FPRN41          ; MOVE ALONG
+FPRN40: COM     (R3)            ; COMPLIMENT HI
+        COM     2(R3)           ; COMPLIMENT LO
+        ADD     #1,2(R3)        ; INCREMENT LO
+        ADC     (R3)            ; ADD CARRY TO HI
+FPRN41: MOV     #'-,-(SP)       ; C <- -
         JSR     PC,FPUTC        ; FPUTC(C, STREAM)
         CLR     (SP)+           ; POP C OFF STACK
         BR      FPRNT3          ; PRINT UNSIGNED
@@ -642,6 +649,43 @@ M1:     DEC     R4              ; DECREMENT THE COUNTER
         BNE     M0              ; IF NOT ZERO, REPEAT
 
         MOV     (SP)+,R4        ; RESTORE R4
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; MULWS(MULTIPLICAND, MULTIPLIER) -> R0: HI, R1: LO
+;
+; SIGNED 16-BIT MULTIPLICATION
+;
+MULWS:
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     R4,-(SP)        ; SAVE R4
+
+        CLR     R2              ; CLEAR NEGATIVE FLAG
+        MOV     10(SP),R3       ; R3 <- MULTIPLICAND
+        MOV     12(SP),R4       ; R4 <- MULTIPLIER
+        TST     R3              ; CHECK MULTIPLICAND
+        BPL     MULWS1          ; IF IT'S POSITIVE, SKIP
+        NEG     R3              ; MAKE IT POSITIVE
+        INC     R2              ; TOGGLE NEGATIVE FLAG
+MULWS1: TST     R4              ; CHECK MULTIPLIER
+        BPL     MULWS2          ; IF IT'S POSITIVE, SKIP
+        NEG     R4              ; MAKE IT POSITIVE
+        INC     R2              ; TOGGLE NEGATIVE FLAG
+MULWS2: MOV     R4,-(SP)        ; MULTIPLICAND <- R4
+        MOV     R3,-(SP)        ; MULTIPLIER <- R3
+        JSR     PC,MULWU        ; MULWU(MULTIPLIER, MULTIPLICAND)
+        ADD     #4,SP           ; CLEAN UP STACK
+        BIT     #1,R2           ; CHECK NEGATIVE FLAG
+        BEQ     MULWS9          ; IF IT'S CLEAR, WE'RE DONE
+        COM     R0              ; COMPLIMENT HI(PRODUCT)
+        COM     R1              ; COMPLIMENT LO(PRODUCT)
+        ADD     #1,R1           ; INCREMENT LO(PRODUCT)
+        ADC     R0              ; ADD CARRY TO HI(PRODUCT)
+        BIS     #100000,R0      ; SET HI BIT OF HI(PRODUCT)
+MULWS9: MOV     (SP)+,R4        ; RESTORE R4
         MOV     (SP)+,R3        ; RESTORE R3
         MOV     (SP)+,R2        ; RESTORE R2
         RTS     PC              ; RETURN TO CALLER
