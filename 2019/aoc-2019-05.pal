@@ -103,7 +103,7 @@ ICEXEC:
 
         MOV     #144,-(SP)      ; DIVISOR <- 100(10)
         MOV     R0,-(SP)        ; DIVIDEND <- INSTRUCTION
-        JSR     PC,DIVU16       ; DIVU16(DIVIDEND, DIVISOR)
+        JSR     PC,DIVWU        ; DIVWU (DIVIDEND, DIVISOR)
         ADD     #4,SP           ; CLEAN UP STACK
 
         CMP     R1,#4           ; IS THE OPCODE > 4?
@@ -140,7 +140,7 @@ ICREAD:
         BLE     ICREA1          ;   YES, SKIP AHEAD
         MOV     #12,-(SP)       ; DIVIDEND <- 10(10)
         MOV     16(SP),-(SP)    ; DIVISOR <- MODES
-        JSR     PC,DIVU16       ; DIVU16(DIVISOR,DIVIDEND)
+        JSR     PC,DIVWU        ; DIVWU (DIVISOR,DIVIDEND)
         ADD     #4,SP           ; CLEAN UP STACK
         MOV     R0,14(SP)       ; STORE REMAINING MODES
 ICREA1:
@@ -257,7 +257,7 @@ ICMUL:
 
         MOV     R0,-(SP)        ; MULTIPLIER <- R0
         MOV     R4,-(SP)        ; MULTIPLICAND <- R4
-        JSR     PC,MULU16       ; MULU16(MULTIPLICAND, MULTIPLIER)
+        JSR     PC,MULWU        ; MULWU (MULTIPLICAND, MULTIPLIER)
         ADD     #4,SP           ; CLEAN UP STACK
 
         MOV     R1,-(SP)        ; VALUE <- LO(PRODUCT)
@@ -324,7 +324,7 @@ FSTRT1: CMP     #'0,R0          ; IF IT'S LESS THAN ZERO
         CLR     -(SP)           ; MULTIPLIER HI <- 0
         MOV     R5,-(SP)        ; MULTIPLICAND LO <- R5
         MOV     R4,-(SP)        ; MULTIPLICAND HI <- R4
-        JSR     PC,MUL32P       ; MUL32P(M'CAND HI, LO, M'PLIER HI, LO)
+        JSR     PC,MULPU        ; MULPU (M'CAND HI, LO, M'PLIER HI, LO)
         ADD     #10,SP          ; CLEAN UP STACK
         MOV     R0,R4           ; R4 <- RESULT HI
         MOV     R1,R5           ; R5 <- RESULT LO

@@ -30,12 +30,12 @@ C1:
         RTS     PC              ; RETURN TO CALLER
 
 ;
-; FU1610(VALUE, OUT)
+; FMTWU (VALUE, OUT)
 ;
 ; FORAMT AN UNSIGNED WORD TO DECIMAL, CALLING THE OUT SUBROUTINE
 ; FOR EACH DIGIT.
 ;
-FU1610:  MOV    R2,-(SP)        ; SAVE R2
+FMTWU:   MOV    R2,-(SP)        ; SAVE R2
          MOV    R3,-(SP)        ; SAVE R3
          MOV    R4,-(SP)        ; SAVE R4
          MOV    10(SP),R0       ; R0 <- VALUE
@@ -44,7 +44,7 @@ FU1610:  MOV    R2,-(SP)        ; SAVE R2
 
 F1:      MOV    #12,-(SP)       ; PUSH DIVISOR (10D)
          MOV    R0,-(SP)        ; PUSH DIVIDEND (VALUE)
-         JSR    PC,DIVU16       ; DIVU16(VALUE, 10D)
+         JSR    PC,DIVWU        ; DIVWU (VALUE, 10D)
          ADD    #4,SP           ; CLEAN UP STACK
          ADD    #60,R1          ; CONVERT REMAINDER TO CHAR
          MOVB   R1,-(SP)        ; PUSH DIGIT TO STACK
@@ -64,12 +64,12 @@ F2:      JSR    PC,(R3)         ; OUT(CHAR) CHAR ALREADY ON STACK
          RTS    PC              ; RETURN TO CALLER
 
 ;
-; FU3210(VALUE HI, VALUE LO, STREAM)
+; FMTDU (VALUE HI, VALUE LO, STREAM)
 ;
 ; FORAMT AN UNSIGNED DOUBLE WORD TO DECIMAL, CALLING THE OUT SUBROUTINE
 ; FOR EACH DIGIT.
 ;
-FU3210:
+FMTDU:
         MOV     R0,-(SP)        ; SAVE R0
         MOV     R1,-(SP)        ; SAVE R1
         MOV     R2,-(SP)        ; SAVE R2
@@ -91,7 +91,7 @@ FF1:    MOV     R2,-(SP)        ; PUSH RESULT ADDRESS
         CLR     -(SP)           ; PUSH DIVISOR HI  0
         MOV     R1,-(SP)        ; PUSH DIVIDEND LO
         MOV     R0,-(SP)        ; PUSH DIVIDEND HI
-        JSR     PC,DIVU32       ; DIVIDE
+        JSR     PC,DIVDU        ; DIVIDE
         ADD     #12,SP          ; CLEAN UP STACK
         MOV     12(SP),R0       ; STORE QUOTIENT HI IN R0
         MOV     14(SP),R1       ; STORE QUOTIENT LO IN R1
@@ -121,10 +121,10 @@ FF2:
         MOV     (SP)+,R0        ; RESTORE R0
         RTS     PC              ; RETURN TO CALLER
 
-; P10U32(STREAM) -> R0: HI, R1: LO
+; PRSWU (STREAM) -> R0: HI, R1: LO
 ;
 ; PARSE A 32 BIT VALUE FROM DECIMAL STRING FROM THE STREAM
-P10U32: MOV     R2,-(SP)        ; SAVE R2
+PRSWU:  MOV     R2,-(SP)        ; SAVE R2
         MOV     R3,-(SP)        ; SAVE R3
         MOV     R4,-(SP)        ; SAVE R4
         MOV     R5,-(SP)        ; SAVE R5
@@ -153,14 +153,14 @@ P104:   MOV     R0,R4           ; STASH BYTE IN R4
         MOV     R4,-(SP)        ; STASH THE NEW DIGIT
         MOV     R3,-(SP)        ; PUSH LO RESULT
         MOV     #12,-(SP)       ; PUSH 10D
-        JSR     PC,MULU16       ; MULU16(LO,10D) -> R0R1
+        JSR     PC,MULWU        ; MULWU (LO,10D) -> R0R1
         ADD     #4,SP           ; CLEAN UP STACK
         MOV     R1,R3           ; LO RESULT = LO(LO* 10D)
         MOV     R0,R4           ; CARRY = HI(LO * 10D)
 
         MOV     R2,-(SP)        ; PUSH HI RESULT
         MOV     #12,-(SP)       ; PUSH 10D
-        JSR     PC,MULU16       ; MULU16(HI,10D) -> R0R1
+        JSR     PC,MULWU        ; MULWU (HI,10D) -> R0R1
         ADD     #4,SP           ; CLEAN UP STACK
         MOV     R1,R2           ; HI RESULT = LO(HI * 10D)
         ADD     R4,R2           ; HI RESULT += CARRY
@@ -387,7 +387,7 @@ FPRNT3:
         BR      FPRN31          ; MOVE ALONG
 FPRN30: MOV     (R3)+,(SP)      ; HI <- ARG
 FPRN31: MOV     (R3)+,2(SP)     ; LO <- ARG
-        JSR     PC,FU3210       ; FU3210(HI, LO, STREAM)
+        JSR     PC,FMTDU        ; FMTDU (HI, LO, STREAM)
         ADD     #4,SP           ; POP HI AND LO OFF STACK
         INC     R2              ; INC FORMAT POINTER
         BR      FPRNT0          ; NEXT CHAR
@@ -617,12 +617,12 @@ PTOUT:  .WORD   4
 ; MATH
 ;
 
-; MULU16(MULTIPLICAND, MULTIPLIER) -> R0: HI, R1: LO
+; MULWU(MULTIPLICAND, MULTIPLIER) -> R0: HI, R1: LO
 ;
 ; UNSIGNED 16-BIT MULTIPLICATION
 ;
 
-MULU16: CLR     R0              ; CLEAR RESULT HI
+MULWU:  CLR     R0              ; CLEAR RESULT HI
         CLR     R1              ; CLEAR RESULT LO
 
         MOV     R2,-(SP)        ; SAVE R2
@@ -647,29 +647,29 @@ M1:     DEC     R4              ; DECREMENT THE COUNTER
         RTS     PC              ; RETURN TO CALLER
 
 ;
-; MUL32P(M'CAND HI, M'CAND LO, MULTIPLIER HI, MULTIPLIER LO) ->
+; MULPU (M'CAND HI, M'CAND LO, MULTIPLIER HI, MULTIPLIER LO) ->
 ;   R0: HI(LO(PRODUCT)), R1: LO(LO(PRODUCT))
 ;
 ; RETURN LOW 32 BITS OF A 32 BIT TIMES 32 BIT PARTIAL PRODUCT
 ;
 ; R1 = LO(LO(A) * LO(B))
 ; R0 = HI(LO(A) * LO(B)) + LO(LO(A) * HI(B)) + LO (HI(A) * LO(B))
-MUL32P:
+MULPU:
         MOV     R2,-(SP)        ; SAVE R2
         MOV     R3,-(SP)        ; SAVE R3
         MOV    10(SP),-(SP)     ; PUSH LO(A): MULTIPLICAND LO
         MOV    16(SP),-(SP)     ; PUSH LO(B): MULTIPLIER LO
-        JSR    PC,MULU16        ; MULTIPLY LO(A) * LO(B)
+        JSR    PC,MULWU         ; MULTIPLY LO(A) * LO(B)
         MOV    R1,R3            ; R3 <- LO(LO(A) * LO(B))
         MOV    R0,R2            ; R2 <- HI(LO(A) * LO(B))
 
         MOV    16(SP),(SP)      ; HI(B): MULTIPLIER HI
-        JSR    PC,MULU16        ; MULTIPLY LO(A) * HI(B)
+        JSR    PC,MULWU         ; MULTIPLY LO(A) * HI(B)
         ADD    R1,R2            ; R2 += LO(LO(A) * HI(B))
 
         MOV    12(SP),(SP)      ; HI(A): MULTIPLICAND HI
         MOV    20(SP),2(SP)     ; LO(B): MULTIPLIER LO
-        JSR    PC,MULU16        ; MULTIPLY HI(A) * LO(B)
+        JSR    PC,MULWU         ; MULTIPLY HI(A) * LO(B)
         ADD    R1,R2            ; R2 += LO(HI(A) * LO(B))
         ADD    #4,SP            ; CLEAN UP STACK
 
@@ -680,11 +680,11 @@ MUL32P:
         MOV    (SP)+,R2         ; RESTORE R2
         RTS    PC               ; RETURN TO CALLER
 
-; DIVU16(DIVIDEND, DIVISOR) -> R0: QUOTIENT, R1: REMAINDER
+; DIVWU (DIVIDEND, DIVISOR) -> R0: QUOTIENT, R1: REMAINDER
 ;
 ; UNSIGNED 16-BIT DIVISION
 ;
-DIVU16:
+DIVWU:
         TST     4(SP)           ; CHECK THE DIVISOR
         BNE     DD1             ; IF NOT ZERO, CONTINUE
         SEV                     ; SET OVERFLOW (ERROR)
@@ -717,12 +717,12 @@ DD3:
         CLV                     ; INDICATE NO ERROR
         RTS     PC              ; RETURN TO CALLER
 
-; DIVU32(DIVIDEND HI, DIVIDEND LO, DIVISOR HI, DIVISOR LO, RESULT)
+; DIVDU (DIVIDEND HI, DIVIDEND LO, DIVISOR HI, DIVISOR LO, RESULT)
 ; (RESULT) -> QUOTIENT HI, QUOTIENT LO, REMAINDER HI, REMAINDER LO
 ;
 ; UNSIGNED 32-BIT DIVISION
 ;
-DIVU32:
+DIVDU:
         TST     10(SP)          ; CHECK DIVISOR LO
         BNE     DA1             ; IF NOT ZERO, CONTINUE
         TST     6(SP)           ; CHECK DIVISOR HI

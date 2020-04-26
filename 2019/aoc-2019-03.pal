@@ -268,7 +268,7 @@ PDL:    BIS     #1,R4           ; SET NEGATE FLAG
 
 PNN:
         MOV     R3,-(SP)        ; PUSH STREAM
-        JSR     PC,P10U32       ; PARSE NUMBER
+        JSR     PC,PRSWU        ; PARSE NUMBER
         BCS     PDONE           ; IF WE'RE DONE, FINISH UP
         CLR     (SP)+           ; CLEAN UP STACK
         BIT     #1,R4           ; CHECK THE NEGATE FLAG
@@ -284,7 +284,7 @@ P2:
         BEQ     P0              ; IF SO, MOVE TO NEXT VALUE
         CLR     -(SP)           ; PUSH JUNK WORD TO STACK FOR CLEANUP
 PDONE:
-        CLR     (SP)+           ; CLEAN UP STACK FROM LAST P10U32
+        CLR     (SP)+           ; CLEAN UP STACK FROM LAST PRSWU
         MOV     R2,R0           ; RETURN END ADDRESS
         MOV     (SP)+,R4        ; RESTORE R4
         MOV     (SP)+,R3        ; RESTORE R3

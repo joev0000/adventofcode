@@ -62,7 +62,7 @@ START:  MOV     #.,SP           ; SET UP STACK
         MOV     #STDOUT,-(SP)   ; PUSH STDOUT
         MOV     ICCOPY+2,-(SP)  ; PUSH LO WORD OF PART 1
         MOV     ICCOPY,-(SP)    ; PUSH HI WORD OF PART 1
-        JSR     PC,FU3210       ; OUTPUT THE PART 1 SOLUTION
+        JSR     PC,FMTDU        ; OUTPUT THE PART 1 SOLUTION
         ADD     #6,SP           ; CLEAN UP STACK
 
         MOV     #STDOUT,-(SP)   ; STREAM = STDOUT
@@ -102,7 +102,7 @@ S1:
 S2:
         MOV     R1,-(SP)        ; PUSH NOUN
         MOV     #144,-(SP)      ; PUSH 100(10)
-        JSR     PC,MULU16       ; MULTIPLY
+        JSR     PC,MULWU        ; MULTIPLY
         ADD     #4,SP           ; CLEAN STACK
         ADD     R2,R1           ; ADD VERB, NOW R1 IS OUR SOLUTION
 
@@ -114,7 +114,7 @@ S2:
         MOV     #STDOUT,-(SP)   ; PUSH STDOUT
         MOV     R1,-(SP)        ; PUSH LO WORD OF PART 2
         CLR     -(SP)           ; PUSH HI WORD (0) OF PART 1
-        JSR     PC,FU3210       ; OUTPUT THE PART 1 SOLUTION
+        JSR     PC,FMTDU        ; OUTPUT THE PART 1 SOLUTION
         ADD     #6,SP           ; CLEAN UP STACK
 
         MOV     #STDOUT,-(SP)   ; STREAM = STDOUT
@@ -139,7 +139,7 @@ ICLOAD:
         MOV     12(SP),R2       ; R2 <- STREAM
 ICL0:
         MOV     R2,-(SP)        ; PUSH STREAM
-        JSR     PC,P10U32       ; P10U32(STREAM)
+        JSR     PC,PRSWU        ; PRSWU (STREAM)
         BCS     ICL1            ; IF CARRY SET, DONE
         TST     (SP)+           ; CLEAN UP STACK
         MOV     R0,(R3)+        ; STORE VALUE HI
@@ -149,7 +149,7 @@ ICL0:
         CLR     (SP)+           ; CLEAN UP STACK
         BR      ICL0            ; NEXT VALUE
 
-ICL1:   TST     (SP)+           ; CLEAN UP STACK FROM LAST P10U32 CALL
+ICL1:   TST     (SP)+           ; CLEAN UP STACK FROM LAST PRSWU  CALL
         MOV     R3,R0           ; RETURN THE ADDRESS AFTER THE INTCODE
         MOV     (SP)+,R3        ; RESTORE R3
         MOV     (SP)+,R2        ; RESTORE R2
@@ -317,7 +317,7 @@ ICMUL:
         MOV     R4,-(SP)        ; PUSH MULTIPLIER HI
         MOV     R1,-(SP)        ; PUSH MULTIPLICAND LO
         MOV     R0,-(SP)        ; PUSH MULTIPLICAND HI
-        JSR     PC,MUL32P       ; PARTIAL MULTIPLY
+        JSR     PC,MULPU        ; PARTIAL MULTIPLY
         ADD     #10,SP          ; CLEAN UP STACK
 
         INC     R2              ; INCREMENT PC TO DESTINATION ARG
