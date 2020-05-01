@@ -279,12 +279,58 @@ ICMUL:
 ; ICIN(PC,MEM,MODES)
 ;
 ICIN:
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R5,-(SP)        ; SAVE R5
+
+        MOV     10(SP),R5       ; R5 <- PC
+        MOV     12(SP),R2       ; R2 <- MEM
+
+        MOV     #STDIN,-(SP)    ; STREAM <- STDIN
+        JSR     PC,PRSWU        ; PRSWU(STREAM)
+        CLR     (SP)+           ; CLEAN UP STACK
+
+        MOV     R1,-(SP)        ; VALUE <- R1
+        MOV     R2,-(SP)        ; MEM <- R2
+        MOV     R5,-(SP)        ; PC <- R5
+        JSR     PC,ICWRIT       ; ICWRIT(PC,MEM,VALUE)
+        ADD     #6,SP           ; CLEAN UP STACK
+        INC     R5              ; INCREMENT PC
+
+        MOV     R5,R0           ; RETURN PC
+
+        MOV     (SP)+,R5        ; RESTORE R5
+        MOV     (SP)+,R2        ; RESTORE R2
+        MOV     (SP)+,R1        ; RESTORE R1
         RTS     PC              ; RETURN TO CALLER
 ;
 ; ICOUT(PC,MEM,MODES)
 ;
 ICOUT:
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R5,-(SP)        ; SAVE R5
+
+        CLR     -(SP)           ; MODES <- 0
+        MOV     R2,-(SP)        ; MEM <- R2
+        MOV     R5,-(SP)        ; PC <- R5
+        JSR     PC,ICREAD       ; ICREAD(PC,MEM,MODE)
+        ADD     #6,SP           ; CLEAN UP STACK
+
+        MOV     R0,-(SP)        ; ARG0 <- R0
+        MOV     #ICOUTF,-(SP)   ; FORMAT <- ICOUTF
+        MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
+        JSR     PC,FPRNTF       ; FPRNTF(STREAM,FORMAT,...)
+        ADD     #6,SP           ; CLEAN UP STACK
+        INC     R5              ; INCREMENT PC
+
+        MOV     R5,R0           ; RETURN PC
+
+        MOV     (SP)+,R5        ; RESTORE R5
+        MOV     (SP)+,R2        ; RESTORE R2
         RTS     PC              ; RETURN TO CALLER
+ICOUTF: .ASCII  /%i/
+        .BYTE   15,12,0
+        .EVEN
 ;
 ; FSTRTL(STREAM) -> R0: HI, R1: LO
 ;
