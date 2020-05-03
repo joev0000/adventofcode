@@ -62,6 +62,7 @@ ICLOAD:
 
         MOV     R3,-(SP)        ; STREAM <- R3
 ICLOA1: JSR     PC,FSTRTL       ; FSTRTL(STREAM)
+        MOV     R0,(R2)+        ; STORE RESULT HI
         MOV     R1,(R2)+        ; STORE RESULT LO
         JSR     PC,FGETC        ; FGETC(STREAM)
         CMP     #',,R0          ; IS IT A COMMA?
@@ -94,6 +95,18 @@ ICEXEC:
 
         MOV     14(SP),R5       ; R5 <- PC
         MOV     16(SP),R2       ; R2 <- MEM
+
+        ; DEBUG: PRINT THE PC.
+        MOV     R5,-(SP)
+        MOV     #ICXFMT,-(SP)
+        MOV     #STDOUT,-(SP)
+        JSR     PC,FPRNTF
+        ADD     #6,SP
+        BR XXX
+ICXFMT: .ASCII /PC: %u/
+        .BYTE 15,12,0
+        .EVEN
+XXX:
         MOV     #1,-(SP)        ; MODE <- IMMEDIATE
         MOV     R2,-(SP)        ; MEM <- R2
         MOV     R5,-(SP)        ; PC <- R5
@@ -102,7 +115,7 @@ ICEXEC:
         INC     R5              ; INCREMENT PC
 
         MOV     #144,-(SP)      ; DIVISOR <- 100(10)
-        MOV     R0,-(SP)        ; DIVIDEND <- INSTRUCTION
+        MOV     R1,-(SP)        ; DIVIDEND <- INSTRUCTION
         JSR     PC,DIVWU        ; DIVWU (DIVIDEND, DIVISOR)
         ADD     #4,SP           ; CLEAN UP STACK
 
@@ -123,20 +136,20 @@ ICEXEC:
         MOV     (SP)+,R1        ; RESTORE R1
         RTS     PC              ; RETURN TO CALLER
 ;
-; ICREAD(PC,MEM,MODE)
+; ICREAD(PC,MEM,MODE): R0 = HI, R1 = LO
 ;
 ; IF MODE > 9, THE LAST DECIMAL DIGIT IS USED, THE REST STORED
 ; BACK TO MODE PARAMETER ON THE STACK
 ICREAD:
-        MOV     R1,-(SP)        ; SAVE R1
+        MOV     R3,-(SP)        ; SAVE R3
         MOV     R2,-(SP)        ; SAVE R2
         MOV     R5,-(SP)        ; SAVE R5
 
         MOV     10(SP),R5       ; R5 <- PC
         MOV     12(SP),R2       ; R2 <- MEM
-        MOV     14(SP),R1       ; R1 <- MODE
+        MOV     14(SP),R3       ; R3 <- MODE
 
-        CMP     R1,#11          ; IS MODE <= 9?
+        CMP     R3,#11          ; IS MODE <= 9?
         BLE     ICREA1          ;   YES, SKIP AHEAD
         MOV     #12,-(SP)       ; DIVIDEND <- 10(10)
         MOV     16(SP),-(SP)    ; DIVISOR <- MODES
@@ -145,22 +158,26 @@ ICREAD:
         MOV     R0,14(SP)       ; STORE REMAINING MODES
 ICREA1:
         ASL     R5              ; CONVERT PC TO OFFSET
+        ASL     R5              ; CONVERT PC TO OFFSET
         ADD     R2,R5           ; ADD OFFSET TO MEM
-        MOV     (R5),R0         ; GET THE VALUE
-        TST     R1              ; CHECK THE MODE
+        MOV     (R5)+,R0        ; GET HI(VALUE)
+        MOV     (R5),R1         ; GET LO(VALUE)
+        TST     R3              ; CHECK THE MODE
         BNE     ICREA9          ; IF 1, IMMEDIATE, WE'RE DONE
-        MOV     R0,R5           ; POSITION MODE
+        MOV     R1,R5           ; POSITION MODE
+        ASL     R5              ; CONVERT ADDRESS TO OFFSET
         ASL     R5              ; CONVERT ADDRESS TO OFFSET
         ADD     R2,R5           ; ADD OFFSET TO MEM
-        MOV     (R5),R0         ; GET THE VALUE
+        MOV     (R5)+,R0        ; GET THE VALUE
+        MOV     (R5),R1         ; GET THE VALUE
 
 ICREA9:
         MOV     (SP)+,R5        ; RESTORE R5
         MOV     (SP)+,R2        ; RESTORE R2
-        MOV     (SP)+,R1        ; RESTORE R1
+        MOV     (SP)+,R3        ; RESTORE R3
         RTS     PC              ; RETURN TO CALLER
 ;
-; ICWRIT(PC, MEM, VALUE)
+; ICWRIT(PC, MEM, HI(VALUE), LO(VALUE))
 ;
 ICWRIT:
         MOV     R1,-(SP)        ; SAVE R1
@@ -170,12 +187,16 @@ ICWRIT:
         MOV     10(SP),R2       ; R2 <- MEM
 
         ASL     R1              ; CONVERT PC TO OFFSET
+        ASL     R1              ; CONVERT PC TO OFFSET
         ADD     10(SP),R1       ; ADD OFFSET TO MEM
-        MOV     (R1),R1
-        ASL     R1
-        ADD     10(SP),R1
-        
-        MOV     12(SP),(R1)     ; SET THE VALUE
+        ADD     #2,R1           ; GET THE LOW WORD
+        MOV     (R1),R1         ; R1 <- PC OF VALUE
+        ASL     R1              ; CONVERT PC TO OFFSET
+        ASL     R1              ; CONVERT PC TO OFFSET
+        ADD     10(SP),R1       ; ADD OFFSET TO MEM
+
+        MOV     12(SP),(R1)+    ; SET HI(VALUE)
+        MOV     14(SP),(R1)     ; SET LO(VALUE)
         MOV     (SP)+,R2        ; RESTORE R2
         MOV     (SP)+,R1        ; RESTORE R1
         RTS     PC              ; RETURN TO CALLER
@@ -206,26 +227,35 @@ ICADD:
         MOV     14(SP),R2       ; R2 <- MEM
         MOV     16(SP),R3       ; R3 <- MODES
 
+        SUB     #4,SP           ; LOCALS
+                                ; 2(SP): LO(RESULT)
+                                ;  (SP): HI(RESULT)
+
         MOV     R3,-(SP)        ; MODE <- MODES
         MOV     R2,-(SP)        ; MEM <- MEM
         MOV     R5,-(SP)        ; PC <- PC
         JSR     PC,ICREAD       ; ICREAD(PC,MEM,MODES)
         INC     (SP)            ; INCREMENT PC ON STACK FOR NEXT READ
-        MOV     R0,R4           ; R4 <- ADDEND
+        MOV     R1,10(SP)       ; LO(RESULT) <- LO(ADDEND)
+        MOV     R0,6(SP)        ; HI(RESULT) <- HI(ADDEND)
         JSR     PC,ICREAD       ; ICREAD(PC,MEM)
         ADD     #6,SP           ; CLEAN UP STACK
-        ADD     R0,R4           ; R4 <- SUM
+        ADD     R1,2(SP)        ; LO(RESULT) += LO(ADDEND)
+        ADC     (SP)            ; ADD CARRY TO HI(RESULT)
+        ADD     R0,(SP)         ; HI(RESULT) += HI(ADDEND)
         ADD     #2,R5           ; INCREMENT THE PC BY 2
 
-        MOV     R4,-(SP)        ; VALUE <- SUM
+        MOV     2(SP),-(SP)     ; LO(VALUE) <- LO(RESULT)
+        MOV     2(SP),-(SP)     ; HI(VALUE) <- HI(RESULT)
         MOV     R2,-(SP)        ; MEM <- MEM
         MOV     R5,-(SP)        ; PC <- PC
-        JSR     PC,ICWRIT       ; ICWRIT(PC,MEM,VALUE)
-        ADD     #6,SP           ; CLEAN UP STACK
+        JSR     PC,ICWRIT       ; ICWRIT(PC,MEM,HI(VALUE),LO(VALUE))
+        ADD     #10,SP          ; CLEAN UP STACK
         INC     R5              ; INCREMENT PC
 
         MOV     R5,R0           ; RETURN NEXT PC
 
+        ADD     #4,SP           ; CLEAN UP LOCALS
         MOV     (SP)+,R5        ; RESTORE R5
         MOV     (SP)+,R3        ; RESTORE R3
         MOV     (SP)+,R4        ; RESTORE R4
@@ -245,30 +275,43 @@ ICMUL:
         MOV     16(SP),R2       ; R2 <- MEM
         MOV     20(SP),R3       ; R3 <- MODES
 
+        SUB     #10,SP          ; LOCALS
+                                ; 6(SP): LO(MULTIPLIER)
+                                ; 4(SP): HI(MULTIPLIER)
+                                ; 2(SP): LO(MULTIPLICAND)
+                                ;  (SP): HI(MULTIPLICAND)
+
         MOV     R3,-(SP)        ; MODE <- MODES
         MOV     R2,-(SP)        ; MEM <- MEM
         MOV     R5,-(SP)        ; PC <- PC
         JSR     PC,ICREAD       ; ICREAD(PC,MEM,MODES)
         INC     (SP)            ; INCREMENT PC ON STACK FOR NEXT READ
-        MOV     R0,R4           ; R4 <- MULTIPLICAND
+        MOV     R1,10(SP)       ; LO(MULTIPLICAND) <- R1
+        MOV     R0,6(SP)        ; HI(MULTIPLICAND) <- R0
         JSR     PC,ICREAD       ; ICREAD(PC,MEM)
+        MOV     R1,14(SP)       ; LO(MULTIPLIER) <- R1
+        MOV     R0,12(SP)       ; HI(MULTIPLIER) <- R0
         ADD     #6,SP           ; CLEAN UP STACK
         ADD     #2,R5           ; INCREMENT THE PC BY 2
 
-        MOV     R0,-(SP)        ; MULTIPLIER <- R0
-        MOV     R4,-(SP)        ; MULTIPLICAND <- R4
-        JSR     PC,MULWU        ; MULWU (MULTIPLICAND, MULTIPLIER)
-        ADD     #4,SP           ; CLEAN UP STACK
+        MOV     6(SP),-(SP)     ; LO(MULTIPLIER)
+        MOV     6(SP),-(SP)     ; HI(MULTIPLIER)
+        MOV     6(SP),-(SP)     ; LO(MULTIPLICAND)
+        MOV     6(SP),-(SP)     ; HI(MULTIPLICAND)
+        JSR     PC,MULPS        ; MULPS(H,L,H,L)
+        ADD     #10,SP          ; CLEAN UP STACK
 
-        MOV     R1,-(SP)        ; VALUE <- LO(PRODUCT)
+        MOV     R1,-(SP)        ; LO(VALUE) <- LO(PRODUCT)
+        MOV     R0,-(SP)        ; HI(VALUE) <- HI(PRODUCT)
         MOV     R2,-(SP)        ; MEM <- MEM
         MOV     R5,-(SP)        ; PC <- PC
         JSR     PC,ICWRIT       ; ICWRIT(PC,MEM,VALUE)
-        ADD     #6,SP           ; CLEAN UP STACK
+        ADD     #10,SP          ; CLEAN UP STACK
         INC     R5              ; INCREMENT PC
 
         MOV     R5,R0           ; RETURN NEXT PC
 
+        ADD     #10,SP          ; DEALLOCATE LOCALS
         MOV     (SP)+,R5        ; RESTORE R5
         MOV     (SP)+,R3        ; RESTORE R3
         MOV     (SP)+,R4        ; RESTORE R4
@@ -309,6 +352,9 @@ ICIN:
 ICOUT:
         MOV     R2,-(SP)        ; SAVE R2
         MOV     R5,-(SP)        ; SAVE R5
+
+        MOV     6(SP),R5        ; R5 <- PC
+        MOV     10(SP),R2       ; R2 <- MEM
 
         CLR     -(SP)           ; MODES <- 0
         MOV     R2,-(SP)        ; MEM <- R2
@@ -404,5 +450,5 @@ FSTRT9:
         RTS     PC              ; RETURN TO CALLER
 
         .EVEN
-MEM:    .=.+2000             ; 1000(10) MEMORY LOCATIONS
+MEM:    .=.+10000                ; 1024(10) MEMORY LOCATIONS
 
