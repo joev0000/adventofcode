@@ -724,6 +724,47 @@ MULPU:
         MOV    (SP)+,R2         ; RESTORE R2
         RTS    PC               ; RETURN TO CALLER
 
+;
+; MULPS (M'CAND HI, M'CAND LO, MULTIPLIER HI, MULTIPLIER LO) ->
+;   R0: HI(LO(PRODUCT)), R1: LO(LO(PRODUCT))
+;
+; RETURN LOW 32 BITS OF A 32 BIT TIMES 32 BIT PARTIAL PRODUCT, SIGNED
+;
+MULPS:
+        MOV     R5,-(SP)        ; SAVE R5
+        CLR     R5              ; R5 <- NEGATIVE FLAG
+        TST     4(SP)           ; CHECK HI(MULTIPLICAND)
+        BPL     MULPS1          ; IF POSITIVE, SKIP
+        COM     4(SP)           ; COMPLIMENT HI(MULTIPLICAND)
+        COM     6(SP)           ; COMPLIMENT LO(MULTIPLICAND)
+        ADD     #1,6(SP)        ; INCREMENT LO(MULTIPICAND)
+        ADC     4(SP)           ; ADD CARRY TO HI(MULTIPLICAND)
+        INC     R5              ; TOGGLE NEGATIVE FLAG
+MULPS1: TST     10(SP)          ; CHECK HI(MULTIPLIER)
+        BPL     MULPS2          ; IF POSITIVE, SKIP
+        COM     10(SP)          ; COMPLIMENT HI(MULTIPLIER)
+        COM     12(SP)          ; COMPLIMENT LO(MULTIPLIER)
+        ADD     #1,12(SP)       ; INCREMENT LO(MULTIPLIER)
+        ADC     10(SP)          ; ADD CARRY TO HI(MULTIPLIER)
+        INC     R5              ; TOGGLE NEGATIVE FLAG
+MULPS2:
+        MOV     12(SP),-(SP)    ; LO(MULTIPLIER)
+        MOV     12(SP),-(SP)    ; HI(MULTIPLIER)
+        MOV     12(SP),-(SP)    ; LO(MULTIPLICAND)
+        MOV     12(SP),-(SP)    ; HI(MULTIPLICAND)
+        JSR     PC,MULPU        ; MULPU(H,L,H,L)
+        ADD     #10,SP          ; CLEAN UP STACK
+
+        BIT     #1,R5           ; CHECK THE NEGATIVE FLAG
+        BEQ     MULPS9          ; IF CLEAR, DONE
+        COM     R0              ; COMPLIMENT HI(RESULT)
+        COM     R1              ; COMPLIMENT LO(RESULT)
+        ADD     #1,R1           ; INCREMENT LO(RESULT)
+        ADC     R0              ; ADD CARRY TO HI(RESULT)
+MULPS9:
+        MOV     (SP)+,R5        ; RESTORE R5
+        RTS     PC              ; RETURN TO CALLER
+
 ; DIVWU (DIVIDEND, DIVISOR) -> R0: QUOTIENT, R1: REMAINDER
 ;
 ; UNSIGNED 16-BIT DIVISION
