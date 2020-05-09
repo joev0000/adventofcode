@@ -96,17 +96,6 @@ ICEXEC:
         MOV     14(SP),R5       ; R5 <- PC
         MOV     16(SP),R2       ; R2 <- MEM
 
-        ; DEBUG: PRINT THE PC.
-        MOV     R5,-(SP)
-        MOV     #ICXFMT,-(SP)
-        MOV     #STDOUT,-(SP)
-        JSR     PC,FPRNTF
-        ADD     #6,SP
-        BR XXX
-ICXFMT: .ASCII /PC: %u/
-        .BYTE 15,12,0
-        .EVEN
-XXX:
         MOV     #1,-(SP)        ; MODE <- IMMEDIATE
         MOV     R2,-(SP)        ; MEM <- R2
         MOV     R5,-(SP)        ; PC <- R5
@@ -149,14 +138,16 @@ ICREAD:
         MOV     12(SP),R2       ; R2 <- MEM
         MOV     14(SP),R3       ; R3 <- MODE
 
+        CLR     R0              ; REMAINING MODES IF MODE <= 9
         CMP     R3,#11          ; IS MODE <= 9?
         BLE     ICREA1          ;   YES, SKIP AHEAD
         MOV     #12,-(SP)       ; DIVIDEND <- 10(10)
         MOV     16(SP),-(SP)    ; DIVISOR <- MODES
         JSR     PC,DIVWU        ; DIVWU (DIVISOR,DIVIDEND)
         ADD     #4,SP           ; CLEAN UP STACK
-        MOV     R0,14(SP)       ; STORE REMAINING MODES
+        MOV     R1,R3           ; R3 <- THIS OPERATION'S MODE
 ICREA1:
+        MOV     R0,14(SP)       ; STORE REMAINING MODES
         ASL     R5              ; CONVERT PC TO OFFSET
         ASL     R5              ; CONVERT PC TO OFFSET
         ADD     R2,R5           ; ADD OFFSET TO MEM
@@ -223,6 +214,31 @@ ICADD:
         MOV     R4,-(SP)        ; SAVE R4
         MOV     R5,-(SP)        ; SAVE R5
 
+        ; DEBUG
+;       MOV     12(SP),R2       ; R2 <- PC
+;       DEC     R2
+;       MOV     12(SP),R4       ; R4 <- PC
+;       ASL     R4
+;       ASL     R4
+;       ADD     #MEM,R4
+;
+;       MOV     16(SP),-(SP)    ; MODES
+;       MOV     12(R4),-(SP)     ; DEST
+;       MOV     10(R4),-(SP)     ; DEST
+;       MOV     6(R4),-(SP)      ; PARAM 2
+;       MOV     4(R4),-(SP)      ; PARAM 2
+;       MOV     2(R4),-(SP)      ; PARAM 1
+;       MOV     (R4),-(SP)      ; PARAM 1
+;       MOV     R2,-(SP)    ; PC
+;       MOV     #ICAFMT,-(SP)
+;       MOV     #STDOUT,-(SP)
+;       JSR     PC,FPRNTF
+;       ADD     #24,SP
+;       BR      ICAXXX
+;ICAFMT: .ASCII  /%u: ADD %li, %li -> %li (MODES: %u)/
+;       .BYTE   15,12,0
+;       .EVEN
+;ICAXXX:
         MOV     12(SP),R5       ; R5 <- PC
         MOV     14(SP),R2       ; R2 <- MEM
         MOV     16(SP),R3       ; R3 <- MODES
@@ -271,6 +287,31 @@ ICMUL:
         MOV     R4,-(SP)        ; SAVE R4
         MOV     R5,-(SP)        ; SAVE R5
 
+        ; DEBUG
+;       MOV     14(SP),R2       ; R2 <- PC
+;       DEC     R2
+;       MOV     14(SP),R4       ; R4 <- PC
+;       ASL     R4
+;       ASL     R4
+;       ADD     #MEM,R4
+;
+;       MOV     20(SP),-(SP)    ; MODES
+;       MOV     12(R4),-(SP)     ; DEST
+;       MOV     10(R4),-(SP)     ; DEST
+;       MOV     6(R4),-(SP)      ; PARAM 2
+;       MOV     4(R4),-(SP)      ; PARAM 2
+;       MOV     2(R4),-(SP)      ; PARAM 1
+;       MOV     (R4),-(SP)      ; PARAM 1
+;       MOV     R2,-(SP)    ; PC
+;       MOV     #ICMFMT,-(SP)
+;       MOV     #STDOUT,-(SP)
+;       JSR     PC,FPRNTF
+;       ADD     #24,SP
+;       BR      ICMXXX
+;ICMFMT: .ASCII  /%u: MUL %li, %li -> %li (MODES: %u)/
+;       .BYTE   15,12,0
+;       .EVEN
+;ICMXXX:
         MOV     14(SP),R5       ; R5 <- PC
         MOV     16(SP),R2       ; R2 <- MEM
         MOV     20(SP),R3       ; R3 <- MODES
@@ -333,11 +374,12 @@ ICIN:
         JSR     PC,PRSWU        ; PRSWU(STREAM)
         CLR     (SP)+           ; CLEAN UP STACK
 
-        MOV     R1,-(SP)        ; VALUE <- R1
+        MOV     R1,-(SP)        ; LO(VALUE) <- R1
+        MOV     R0,-(SP)        ; HI(VALUE) <- R0
         MOV     R2,-(SP)        ; MEM <- R2
         MOV     R5,-(SP)        ; PC <- R5
-        JSR     PC,ICWRIT       ; ICWRIT(PC,MEM,VALUE)
-        ADD     #6,SP           ; CLEAN UP STACK
+        JSR     PC,ICWRIT       ; ICWRIT(PC,MEM,HI(VALUE),LO(VALUE)
+        ADD     #10,SP          ; CLEAN UP STACK
         INC     R5              ; INCREMENT PC
 
         MOV     R5,R0           ; RETURN PC
@@ -353,6 +395,28 @@ ICOUT:
         MOV     R2,-(SP)        ; SAVE R2
         MOV     R5,-(SP)        ; SAVE R5
 
+        ; DEBUG
+;       MOV     6(SP),R2
+;       DEC     R2
+;       MOV     6(SP),R5
+;       ASL     R5
+;       ASL     R5
+;       ADD     10(SP),R5
+;
+;       MOV     12(SP),-(SP)
+;       MOV     2(R5),-(SP)
+;       MOV     (R5),-(SP)
+;       MOV     R2,-(SP)
+;       MOV     #ICOFMT,-(SP)
+;       MOV     #STDOUT,-(SP)
+;       JSR     PC,FPRNTF
+;       ADD     #14,SP
+;       BR      ICOXXX
+;ICOFMT: .ASCII  /%u: OUT %lu (MODES: %u)/
+;       .BYTE   15,12,0
+;       .EVEN
+;ICOXXX:
+
         MOV     6(SP),R5        ; R5 <- PC
         MOV     10(SP),R2       ; R2 <- MEM
 
@@ -362,11 +426,12 @@ ICOUT:
         JSR     PC,ICREAD       ; ICREAD(PC,MEM,MODE)
         ADD     #6,SP           ; CLEAN UP STACK
 
+        MOV     R1,-(SP)        ; ARG1 <- R1
         MOV     R0,-(SP)        ; ARG0 <- R0
         MOV     #ICOUTF,-(SP)   ; FORMAT <- ICOUTF
         MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
         JSR     PC,FPRNTF       ; FPRNTF(STREAM,FORMAT,...)
-        ADD     #6,SP           ; CLEAN UP STACK
+        ADD     #10,SP          ; CLEAN UP STACK
         INC     R5              ; INCREMENT PC
 
         MOV     R5,R0           ; RETURN PC
@@ -374,7 +439,7 @@ ICOUT:
         MOV     (SP)+,R5        ; RESTORE R5
         MOV     (SP)+,R2        ; RESTORE R2
         RTS     PC              ; RETURN TO CALLER
-ICOUTF: .ASCII  /%i/
+ICOUTF: .ASCII  /%li/
         .BYTE   15,12,0
         .EVEN
 ;
