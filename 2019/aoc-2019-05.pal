@@ -420,7 +420,7 @@ ICOUT:
         MOV     6(SP),R5        ; R5 <- PC
         MOV     10(SP),R2       ; R2 <- MEM
 
-        CLR     -(SP)           ; MODES <- 0
+        MOV     12(SP),-(SP)    ; MODES <- MODES
         MOV     R2,-(SP)        ; MEM <- R2
         MOV     R5,-(SP)        ; PC <- R5
         JSR     PC,ICREAD       ; ICREAD(PC,MEM,MODE)
