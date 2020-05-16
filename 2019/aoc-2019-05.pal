@@ -85,6 +85,10 @@ ICLOA1: JSR     PC,FSTRTL       ; FSTRTL(STREAM)
 ;   2: MUL :  A * B -> C
 ;   3: INP :  -> A
 ;   4: OUTP:  A ->
+;   5: JIT : A != 0? PC = B
+;   6: JIF : A == 0? PC = B
+;   7: LT  : C = A < B
+;   8: EQ  : C = A == B
 ;  99: HALT
 ICEXEC:
         MOV     R1,-(SP)        ; SAVE R1
@@ -108,7 +112,7 @@ ICEXEC:
         JSR     PC,DIVWU        ; DIVWU (DIVIDEND, DIVISOR)
         ADD     #4,SP           ; CLEAN UP STACK
 
-        CMP     R1,#4           ; IS THE OPCODE > 4?
+        CMP     R1,#10          ; IS THE OPCODE > 8(10)?
         BLE     .+4             ;   IF SO, SKIP
         CLR     R1              ; SET OPCODE TO 0 (HALT)
         ASL     R1              ; MULTIPLY OPCODE BY 2 TO GET OFFSET
@@ -192,11 +196,15 @@ ICWRIT:
         MOV     (SP)+,R1        ; RESTORE R1
         RTS     PC              ; RETURN TO CALLER
 
-OPCODE: .WORD   ICHALT          ; OPCODE 0 (OPCODE > 4)
+OPCODE: .WORD   ICHALT          ; OPCODE 0 (OPCODE > 8)
         .WORD   ICADD           ; OPCODE 1
         .WORD   ICMUL           ; OPCODE 2
         .WORD   ICIN            ; OPCODE 3
         .WORD   ICOUT           ; OPCODE 4
+        .WORD   ICJIT           ; OPCODE 5
+        .WORD   ICJIF           ; OPCODE 6
+        .WORD   ICLT            ; OPCODE 7
+        .WORD   ICEQ            ; OPCODE 8
 
 ;
 ; ICHALT(PC,MEM,MODES)
@@ -442,6 +450,147 @@ ICOUT:
 ICOUTF: .ASCII  /%li/
         .BYTE   15,12,0
         .EVEN
+
+;
+; ICJIT(PC,MEM,MODES)
+;
+; IF FIRST PARAMETER IS NON-ZERO, PC = SECOND PARAMETER
+;
+ICJIT:
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     10(SP),-(SP)    ; MODES <- MODES
+        MOV     10(SP),-(SP)    ; MEM <- MEM
+        MOV     10(SP),-(SP)    ; PC <- PC
+        JSR     PC,ICREAD       ; ICREAD(PC,MEM,MODES)
+        TST     R1              ; CHECK LO VALUE
+        BNE     ICJIT1          ; NO, JUMP
+        TST     R0              ; CHECK HI VALUE
+        BNE     ICJIT1          ; NO, JUMP
+        ADD     #6,SP           ; CLEAN UP STACK
+        MOV     4(SP),R0        ; R0 <- PC
+        ADD     #2,R0           ; SKIP TO NEXT INSTRUCTION
+        BR      ICJIT9          ; WE'RE DONE
+ICJIT1: INC     (SP)            ; PC <- SECOND ARG
+        JSR     PC,ICREAD       ; ICREAD(PC,MEM,MODES)
+        ADD     #6,SP           ; CLEAN UP STACK
+        MOV     R1,R0           ; NEXT INSTRUCTION IS IN R1
+ICJIT9: MOV     (SP)+,R1        ; RESTORE R1
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; ICJIF(PC,MEM,MODES)
+;
+; IF FIRST PARAMETER IS ZERO, PC = SECOND PARAMETER
+;
+ICJIF:
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     10(SP),-(SP)    ; MODES <- MODES
+        MOV     10(SP),-(SP)    ; MEM <- MEM
+        MOV     10(SP),-(SP)    ; PC <- PC
+        JSR     PC,ICREAD       ; ICREAD(PC,MEM,MODES)
+        TST     R1              ; CHECK LO VALUE
+        BNE     ICJIF1          ; NO, JUMP
+        TST     R0              ; CHECK HI VALUE
+        BNE     ICJIF1          ; NO, JUMP
+        INC     (SP)            ; PC <- SECOND ARG
+        JSR     PC,ICREAD       ; ICREAD(PC,MEM,MODES)
+        ADD     #6,SP           ; CLEAN UP STACK
+        MOV     R1,R0           ; NEXT INSTRUCTION IS IN R1
+        BR      ICJIF9          ; WE'RE DONE
+ICJIF1: ADD     #6,SP           ; CLEAN UP STACK
+        MOV     4(SP),R0        ; R0 <- PC
+        ADD     #2,R0           ; SKIP TO NEXT INSTRUCTION
+ICJIF9: MOV     (SP)+,R1        ; RESTORE R1
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; ICLT(PC,MEM,MODES)
+;
+; IF FIRST PARAM LESS THAN SECOND, STORE 1 IN THIRD PARAM
+;
+ICLT:
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+
+        MOV     14(SP),-(SP)    ; MODES <- MODES
+        MOV     14(SP),-(SP)    ; MEM <- MEM
+        MOV     14(SP),-(SP)    ; PC <- PC
+        JSR     PC,ICREAD       ; ICREAD(PC,MEM,MODES)
+        INC     (SP)            ; INCREMENT PC FOR NEXT READ
+        MOV     R1,R3           ; R3 <- LO
+        MOV     R0,R2           ; R2 <- HI
+        JSR     PC,ICREAD       ; ICREAD(PC,MEM,MODES)
+        ADD     #6,SP           ; CLEAN UP STACK
+
+        CMP     R2,R0           ; COMPARE HI WORDS
+        BLT     ICLT1           ; IF LESS THAN, RETURN 1
+        BGT     ICLT0           ; IF GREATER THAN, RETURN 0
+
+        CMP     R3,R1           ; HI IS EQUAL, COMPARE LO WORDS
+        BLT     ICLT1           ; IF LESS THAN, RETURN 1
+ICLT0:  CLR     R3              ; OTHERWISE, RETURN 0
+        BR      ICLT2           ; SKIP AHEAD
+ICLT1:  MOV     #1,R3           ; RETURN 1
+ICLT2:  MOV     10(SP),R2       ; R2 <- PC
+        ADD     #2,R2           ; R2 <- WRITE POSITION
+
+        MOV     R3,-(SP)        ; LO <- R3
+        CLR     -(SP)           ; HI <- 0
+        MOV     16(SP),-(SP)    ; MEM <- MEM
+        MOV     R2,-(SP)        ; PC <- R2
+        JSR     PC,ICWRIT       ; ICWRIT(PC,MEM,HI,LO)
+        ADD     #10,SP          ; CLEAN UP STACK
+        MOV     10(SP),R0       ; R0 <- PC
+        ADD     #3,R0           ; MOVE PC TO NEXT INSTRUCTION
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        MOV     (SP)+,R1        ; RESTORE R1
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; ICEQ(PC,MEM,MODES)
+;
+; IF FIRST PARAM EQUALS SECOND, STORE 1 IN THIRD PARAM
+;
+ICEQ:
+        MOV     R2,-(SP)        ; SAVE R1
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+
+        MOV     14(SP),-(SP)    ; MODES <- MODES
+        MOV     14(SP),-(SP)    ; MEM <- MEM
+        MOV     14(SP),-(SP)    ; PC <- PC
+        JSR     PC,ICREAD       ; ICREAD(PC,MEM,MODES)
+        INC     (SP)            ; INCREMENT PC FOR NEXT READ
+        MOV     R1,R3           ; R3 <- LO
+        MOV     R0,R2           ; R2 <- HI
+        JSR     PC,ICREAD       ; ICREAD(PC,MEM,MODES)
+        ADD     #6,SP           ; CLEAN UP STACK
+        CMP     R1,R3           ; ARE THE LO WORDS EQUAL?
+        BNE     ICEQ1           ; NO, SKIP AHEAD
+        CMP     R0,R2           ; ARE THE HI WORDS EQUAL?
+        BNE     ICEQ1           ; NO SKIP ADEAD
+        MOV     #1,R3           ; SET VALUE TO WRITE TO 1
+        BR      ICEQ2           ; SKIP AHEAD
+ICEQ1:  CLR     R3              ; SET VALUE TO WRITE TO 0
+ICEQ2:  MOV     10(SP),R2       ; R2 <- PC
+        ADD     #2,R2           ; R2 <- WRITE POSITION
+
+        MOV     R3,-(SP)        ; LO <- R3
+        CLR     -(SP)           ; HI <- 0
+        MOV     16(SP),-(SP)    ; MEM <- MEM
+        MOV     R2,-(SP)        ; PC <- R2
+        JSR     PC,ICWRIT       ; ICWRIT(PC,MEM,HI,LO)
+        ADD     #10,SP          ; CLEAN UP STACK
+        MOV     10(SP),R0       ; R0 <- PC
+        ADD     #3,R0           ; MOVE PC TO NEXT INSTRUCTION
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        MOV     (SP)+,R1        ; RESTORE R1
+        RTS     PC              ; RETURN TO CALLER
+
+
 ;
 ; FSTRTL(STREAM) -> R0: HI, R1: LO
 ;
