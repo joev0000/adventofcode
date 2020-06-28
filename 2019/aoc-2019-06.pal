@@ -28,12 +28,24 @@
         .=      1000            ; ASSEMBLE AT ADDRESS 1000
 START:  MOV     #.,SP           ; SET UP STACK
 
-        MOV     #20,-(SP)       ; SIZE <- 20
+        MOV     #10,-(SP)       ; SIZE <- 20
         JSR     PC,MALLOC       ; MALLOC(SIZE)
         TST     (SP)+           ; CLEAN UP STACK
 
-        MOV     #14,-(SP)       ; SIZE <- 14
+        MOV     R0,R1
+
+        MOV     #20,-(SP)       ; SIZE <- 14
         JSR     PC,MALLOC       ; MALLOC(SIZE)
+        TST     (SP)+           ; CLEAN UP STACK
+
+        MOV     R0,R2
+
+        MOV     R1,-(SP)        ; PTR <- R1
+        JSR     PC,FREE         ; FREE(PTR)
+        TST     (SP)+           ; CLEAN UP STACK
+
+        MOV     R2,-(SP)        ; PTR <- R1
+        JSR     PC,FREE         ; FREE(PTR)
         TST     (SP)+           ; CLEAN UP STACK
 
         HALT                    ; END OF PROGRAM
@@ -172,7 +184,7 @@ MALLO0: ; FIND A FREE BLOCK WITH ENOUGH SIZE
 MALLO1: ; ALLOC FREE BLOCK THAT IS EXACTLY THE SAME SIZE AS REQUESTED
         MOV     2(R1),2(R2)     ; POINT THE PREV NEXT FREE TO NEXT FREE
         MOV     R1,R0           ; SET THE RESULT TO THE CURRENT BLOCK
-        ADD     #4,R0           ; POINT R0 TO THE DATA ELEMENT OF BLOCK
+        ADD     #2,R0           ; POINT R0 TO THE DATA ELEMENT OF BLOCK
         BR      MALLO9          ; WE'RE DONE
 
 MALLO2: ; SPLIT FREE BLOCK
@@ -185,7 +197,7 @@ MALLO2: ; SPLIT FREE BLOCK
         ADD     12(SP),R1       ; POINT TO START OF EMPTY PART
         ADD     #2,R1           ; ADD SPACE FOR HEADER
         SUB     12(SP),R3       ; SUBTRACT OUT NEW SIZE
-        SUB     #4,R3           ; SUBCTRACT OUT HEADER SPACE
+        SUB     #2,R3           ; SUBCTRACT OUT HEADER SPACE
         MOV     R3,(R1)         ; SET SIZE OF EMPTY PART
         MOV     R4,2(R1)        ; SET NEXT FREE BLOCK
         MOV     R1,2(R2)        ; POINT THE PREV NEXT FREE TO EMPTY B
@@ -204,6 +216,29 @@ MALLO9: MOV     (SP)+,R4        ; RESTORE R4
 ; FREE MEMORY ALLOCATED BY MALLOC
 ;
 FREE:
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     R2,-(SP)        ; SAVE R2
+
+        MOV     #HEAP,R1        ; START AT THE BEGINNIG
+        SUB     #2,R1           ; ADJUSTMENT TO FIND NEXT FREE PTR
+        MOV     6(SP),R2        ; PUT PTR IN R2
+
+FREE0:
+        TST     2(R1)           ; IS NEXT FREE NULL?
+        BEQ     FREE9           ; IF SO, WE'RE DONE
+        CMP     2(R1),R2        ; COMPARE NEXT FREE WITH PTR
+        BGT     FREE1           ; IF IT'S GREATER, WE FOUND IT
+        MOV     2(R1),R1        ; OTHERWISE,
+        BR      FREE0           ; NEXT
+
+FREE1:
+        MOV    2(R1),(R2)       ; COPY NEXT PTR TO FREED BLOCK NEXT
+        SUB    #2,R2            ; SET R2 TO FREED BLOCK
+        MOV    R2,2(R1)         ; COPY PTR TO NEXT PTR
+
+FREE9:
+        MOV     (SP)+,R2        ; RESTORE R2
+        MOV     (SP)+,R1        ; RESTORE R1
         RTS     PC              ; RETURN TO CALLER
 
 
