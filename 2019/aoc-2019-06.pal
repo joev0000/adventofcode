@@ -28,25 +28,17 @@
         .=      1000            ; ASSEMBLE AT ADDRESS 1000
 START:  MOV     #.,SP           ; SET UP STACK
 
-        MOV     #DEF,-(SP)
-        JSR     PC,STOR50
-        ADD     #2,SP
+        MOV     #20,-(SP)       ; SIZE <- 20
+        JSR     PC,MALLOC       ; MALLOC(SIZE)
+        TST     (SP)+           ; CLEAN UP STACK
 
+        MOV     #14,-(SP)       ; SIZE <- 14
+        JSR     PC,MALLOC       ; MALLOC(SIZE)
+        TST     (SP)+           ; CLEAN UP STACK
 
         HALT                    ; END OF PROGRAM
         BR      START           ; START OVER
-ABC:    .ASCII /ABC/
-DEF:    .ASCII /DEF/
         .EVEN
-;
-; A LIST OF NODES
-; 0: NAME(R50)
-; 2: PTR TO PARENT NODE
-; 4: DISTANCE FROM ROOT
-
-NODES:  .=      .+16000         ; 1194(10) NODES
-
-
 
 ;
 ; STOR50(S)
@@ -107,3 +99,119 @@ R50TBL: .BYTE -1,-1,-1,-1,-1,-1,-1,-1  ; 00X
         .BYTE -1,-1,-1,-1,-1,-1,-1,-1  ; 15X
         .BYTE -1,-1,-1,-1,-1,-1,-1,-1  ; 16X
         .BYTE -1,-1,-1,-1,-1,-1,-1,-1  ; 17X
+
+; TREE
+;
+; KEY
+; DATA
+; LEFT PTR
+; RIGHT PTR
+;
+; TINIT(TREE): initalize table at PTR.
+; TPUT(TREE, KEY, DATA): insert/overwrite node
+; TGET(TREE, KEY): return a ptr to a payload.
+; TWALK(TREE, PROC(KEY, DATA)): visit each node
+;
+; TREE:
+;   NEXT FREE
+;   ROOT PTR
+
+; DYNAMIC MEMORY ALLOCATION ROUTINES
+
+; HEAP STRUCTURE:
+;   FIRST FREE BLOCK
+;   BLOCK 0:
+;     SIZE
+;     NEXT FREE (if deallocated)
+;     DATA      (if allocated)
+;   BLOCK 1:
+;     SIZE
+;     NEXT FREE (if deallocated)
+;     DATA      (if allocated)
+;   ...
+;   BLOCK N:
+;     SIZE
+;     0         (if deallocated)
+;     DATA      (if allocated)
+
+
+;
+; MALLOC(SIZE)
+;
+; ALLOCATE A CONTIGUOUS BLOCK OF MEMORY WITH AT LEAST THE GIVEN SIZE
+; IN BYTES.  RETURN 0 IF THIS CANNOT BE DONE
+;
+MALLOC:
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     R4,-(SP)        ; SAVE R4
+
+        ; WORD-ALIGN THE SIZE
+        INC     12(SP)          ; INCREMENT SIZE
+        BIC     #1,12(SP)       ; CLEAR LOW BIT
+
+        ; INITIALIZE FREE BLOCK POINTER
+        MOV     #HEAP,R1        ; R1 <- PTR TO FIRST FREE BLOCK
+        SUB     #2,R1           ; SUBTRACT TWO, TO SIMULATE THE
+                                ;   FREE BLOCK FIELD, IN OFFSET 2
+
+MALLO0: ; FIND A FREE BLOCK WITH ENOUGH SIZE
+        MOV     R1,R2           ; R2 IS THE PREVIOUS FREE BLOCK
+        TST     2(R1)           ; CHECK THE PTR
+        BEQ     MALLO8          ; IF NO NEXT FREE BLOCK, RETURN NULL
+        MOV     2(R1),R1        ; OTHERWISE, POINT R1 TO THE NEXT FREE
+        MOV     (R1),R3         ; FIND THE DIFFERENCE BETWEEN THE
+        SUB     12(SP),R3       ;   CURR BLOCK SIZE AND REQUESTED
+        TST     R3              ; CHECK TO SEE IF THEY'RE EQUAL
+        BEQ     MALLO1          ; IF SO, ALLOCATE WITHOUT SPLIT
+        CMP     R3,#4           ; IS THE CURRENT BLOCK SIZE BIG ENOUGH
+        BGT     MALLO2          ; IF SO, ALLOCATE BY SPLITTING
+        BR      MALLO0          ; OTHERWISE, TRY THE NEXT FREE BLOCK
+
+MALLO1: ; ALLOC FREE BLOCK THAT IS EXACTLY THE SAME SIZE AS REQUESTED
+        MOV     2(R1),2(R2)     ; POINT THE PREV NEXT FREE TO NEXT FREE
+        MOV     R1,R0           ; SET THE RESULT TO THE CURRENT BLOCK
+        ADD     #4,R0           ; POINT R0 TO THE DATA ELEMENT OF BLOCK
+        BR      MALLO9          ; WE'RE DONE
+
+MALLO2: ; SPLIT FREE BLOCK
+        MOV     R1,R0           ; MOVE THE BLOCK HEADER TO R0
+        ADD     #2,R0           ; POINT R0 TO DATA ELEMENT OF BLOCK
+
+        MOV     (R1),R3         ; STASH ORIGINAL BLOCK SIZE IN R3
+        MOV     2(R1),R4        ; STASH ORIGINAL NEXT FREE IN R4
+        MOV     12(SP),(R1)     ; WRITE NEW SIZE
+        ADD     12(SP),R1       ; POINT TO START OF EMPTY PART
+        ADD     #2,R1           ; ADD SPACE FOR HEADER
+        SUB     12(SP),R3       ; SUBTRACT OUT NEW SIZE
+        SUB     #4,R3           ; SUBCTRACT OUT HEADER SPACE
+        MOV     R3,(R1)         ; SET SIZE OF EMPTY PART
+        MOV     R4,2(R1)        ; SET NEXT FREE BLOCK
+        MOV     R1,2(R2)        ; POINT THE PREV NEXT FREE TO EMPTY B
+        BR      MALLO9          ; RETURN
+
+MALLO8: CLR     R0              ; R0 <- NULL
+MALLO9: MOV     (SP)+,R4        ; RESTORE R4
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        MOV     (SP)+,R1        ; RESTORE R1
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; FREE(PTR)
+;
+; FREE MEMORY ALLOCATED BY MALLOC
+;
+FREE:
+        RTS     PC              ; RETURN TO CALLER
+
+
+;
+; HEAP: MEMORY SPACE FOR DYNAMIC ALLOCATION
+;
+HSIZE   =       40000
+HEAP:   .WORD   .+2             ; FIRST FREE
+        .WORD   HSIZE-4         ; BLOCK 0 SIZE
+        .WORD   0               ; NEXT FREE BLOCK
+        .=      .+HSIZE-6       ; MOVE ASSEMBLY POSITION PAST HEAP
