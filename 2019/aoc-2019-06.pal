@@ -28,22 +28,31 @@
         .=      1000            ; ASSEMBLE AT ADDRESS 1000
 START:  MOV     #.,SP           ; SET UP STACK
 
-        MOV     #10,-(SP)       ; SIZE <- 10
+        MOV     #10,-(SP)       ; SIZE <- 10(8)
         JSR     PC,MALLOC       ; MALLOC(SIZE)
         TST     (SP)+           ; CLEAN UP STACK
-        MOV     R0,R1           ; THIS ^ IS THE BLOCK TO FREE
+        MOV     R0,R1           ; R1 <- ROOT
+        MOV     #1000,(R1)      ; ROOT.KEY = 1000
+        MOV     #10,2(R1)       ; ROOT.DATA = 10
+        CLR     4(R1)           ; ROOT.LEFT = NULL
+        CLR     6(R1)           ; ROOT.RIGHT = NULL
 
-        MOV     #10,-(SP)       ; SIZE <- 10
-        JSR     PC,MALLOC       ; MALLOC(SIZE)
-        TST     (SP)+           ; CLEAN UP STACK
+        MOV     #40,-(SP)       ; DATA <- 40
+        MOV     #400,-(SP)      ; KEY <- 400
+        MOV     R1,-(SP)        ; ROOT <- R1
+        JSR     PC,TPUT         ; TPUT(ROOT, KEY, DATA)
+        ADD     #6,SP           ; CLEAN UP STACK
 
-        MOV     #10,-(SP)       ; SIZE <- 10
-        JSR     PC,MALLOC       ; MALLOC(SIZE)
-        TST     (SP)+           ; CLEAN UP STACK
+        MOV     #20,-(SP)       ; DATA <- 20
+        MOV     #2000,-(SP)     ; KEY <- 2000
+        MOV     R1,-(SP)        ; ROOT <- R1
+        JSR     PC,TPUT         ; TPUT(ROOT, KEY, DATA)
+        ADD     #6,SP           ; CLEAN UP STACK
 
-        MOV     R1,-(SP)        ; PTR <- R1
-        JSR     PC,FREE         ; FREE(PTR)
-        TST     (SP)+           ; CLEAN UP STACK
+        MOV     #400,-(SP)      ; KEY <- 400
+        MOV     R1,-(SP)        ; ROOT <- R1
+        JSR     PC,TGET         ; TGET(ROOT, KEY)
+        ADD     #4,SP           ; CLEAN UP STACK
 
         HALT                    ; END OF PROGRAM
         BR      START           ; START OVER
@@ -116,14 +125,92 @@ R50TBL: .BYTE -1,-1,-1,-1,-1,-1,-1,-1  ; 00X
 ; LEFT PTR
 ; RIGHT PTR
 ;
-; TINIT(TREE): initalize table at PTR.
-; TPUT(TREE, KEY, DATA): insert/overwrite node
-; TGET(TREE, KEY): return a ptr to a payload.
-; TWALK(TREE, PROC(KEY, DATA)): visit each node
+; TPUT(ROOT, KEY, DATA): insert/overwrite node
+; TGET(ROOT, KEY): return a ptr to a payload.
+; TFREE(ROOT): deallocate all tree nodes
+; TWALK(ROOT, PROC(KEY, DATA)): visit each node
+
 ;
-; TREE:
-;   NEXT FREE
-;   ROOT PTR
+; TGET(ROOT, KEY)
+;
+; RETURN THE DATA VALUE FROM THE NODE WITH THE GIVEN KEY
+; RETURN ZERO IF THE KEY DOES NOT APPEAR IN THE TREE
+;
+TGET:
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     4(SP),R1        ; R1 <- ROOT
+
+        CLR     R0              ; RETURN NULL BY DEFAULT
+TGET0:
+        CMP     6(SP),(R1)      ; COMPARE KEY WITH ROOT.KEY
+        BNE     TGET1           ; IF NOT EQUAL, SKIP AHEAD
+        MOV     2(R1),R0        ; IF EQUAL, RETURN DATA
+        BR      TGET9           ; WE'RE DONE
+TGET1:
+        BGT     TGET2           ; IF KEY > ROOT.KEY, SKIP AHEAD
+        ; HERE, KEY < ROOT.KEY
+        TST     4(R1)           ; CHECK ROOT.LEFT
+        BEQ     TGET9           ; IF NULL, WE'RE DONE
+        MOV     4(R1),R1        ; MOVE TO LEFT PTR
+        BR      TGET0           ; AND TRY THERE.
+TGET2:
+        ; HERE, KEY > ROOT.KEY
+        TST     6(R1)           ; CHECK ROOT.RIGHT
+        BEQ     TGET9           ; IF NULL, WE'RE DONE
+        MOV     6(R1),R1        ; MOVE TO RIGHT PTR
+        BR      TGET0           ; AND TRY THERE.
+TGET9:
+        MOV     (SP)+,R1        ; RESTORE R1
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; TPUT(ROOT, KEY, DATA)
+;
+; PUT OR OVERWRITE THE DATA FOR THE GIVEN KEY INTO THE TREE
+TPUT:
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     4(SP),R1        ; R1 <- ROOT
+TPUT0:
+        CMP     6(SP),(R1)      ; COMPARE KEY WITH ROOT.KEY
+        BNE     TPUT1           ; IF NOT EQUAL, SKIP
+        MOV     10(SP),2(R1)    ; IF EQUAL STORE DATA IN ROOT.DATA
+        BR      TPUT9           ; WE'RE DONE
+TPUT1:
+        BGT     TPUT2           ; IF KEY > ROOT.KEY, SKIP AHEAD
+        ; HERE, KEY < ROOT.KEY.
+        TST     4(R1)           ; CHECK ROOT.LEFT
+        BNE     TPUT3           ; IF NOT NULL, SKIP AHEAD
+        ; CREATE A NEW NODE, ASSIGN IT TO ROOT.LEFT
+        MOV     #10,-(SP)       ; SIZE <- 10(8)
+        JSR     PC,MALLOC       ; MALLOC(SIZE)
+        TST     (SP)+           ; CLEAN UP STACK
+        MOV     6(SP),(R0)      ; NEW.KEY <- KEY
+        CLR     2(R0)           ; NEW.DATA <- 0
+        CLR     4(R0)           ; NEW.LEFT <- NULL
+        CLR     6(R0)           ; NEW.RIGHT <- NULL
+        MOV     R0,4(R1)        ; ROOT.LEFT <- NEW
+TPUT3:
+        MOV     4(R1),R1        ; MOVE TO LEFT PTR
+        BR      TPUT0           ; AND TRY THERE.
+TPUT2:
+        ; HERE, KEY > ROOT.KEY.
+        TST     6(R1)           ; CHECK ROOT.RIGHT
+        BNE     TPUT4           ; IF NOT NULL, SKIP AHEAD
+        ; CREATE A NEW NODE, ASSIGN IT TO ROOT.LEFT
+        MOV     #10,-(SP)       ; SIZE <- 10(8)
+        JSR     PC,MALLOC       ; MALLOC(SIZE)
+        TST     (SP)+           ; CLEAN UP STACK
+        MOV     6(SP),(R0)      ; NEW.KEY <- KEY
+        CLR     2(R0)           ; NEW.DATA <- 0
+        CLR     4(R0)           ; NEW.LEFT <- NULL
+        CLR     6(R0)           ; NEW.RIGHT <- NULL
+        MOV     R0,6(R1)        ; ROOT.RIGHT <- NEW
+TPUT4:
+        MOV     6(R1),R1        ; MOVE TO RIGHT PTR
+        BR      TPUT0           ; AND TRY THERE
+TPUT9:
+        MOV     (SP)+,R1        ; RESTORE R1
+        RTS     PC              ; RETURN TO CALLER
 
 ; DYNAMIC MEMORY ALLOCATION ROUTINES
 
