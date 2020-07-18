@@ -28,29 +28,172 @@
         .=      1000            ; ASSEMBLE AT ADDRESS 1000
 START:  MOV     #.,SP           ; SET UP STACK
 
+        SUB     #4,SP           ; LOCALS:
+                                ; 0(SP): TREE
+                                ; 2(SP): ARRAY OF ORBITS
+
         JSR     PC,TALLOC       ; TALLOC()
-        MOV     R0,R1           ; R1 <- TREE
+        MOV     R0,(SP)         ; TREE <- RESULT
 
-        MOV     #40,-(SP)       ; DATA <- 40
-        MOV     #400,-(SP)      ; KEY <- 400
-        MOV     R1,-(SP)        ; ROOT <- R1
-        JSR     PC,TPUT         ; TPUT(ROOT, KEY, DATA)
+        MOV     #17000,-(SP)    ; SIZE <- 2400(8) * 6
+        JSR     PC,MALLOC       ; MALLOC(SIZE)
+        TST     (SP)+           ; CLEAN UP STACK
+        MOV     R0,2(SP)        ; ARRAY OF ORBITS <- R0
+        MOV     R0,R4           ; R4 <- NEXT ELEMENT TO WRITE
+
+        MOV     #12445,(R4)+    ; FIRST ELEMENT KEY <- R50(COM)
+        CLR     (R4)+           ; FIRST ELEMENT PARENT <- NULL
+        CLR     (R4)+           ; FIRST ELEMENT DISTANCE <- 0
+
+        MOV     R0,-(SP)        ; DATA <- FIRST ELEMENT
+        MOV     #12455,-(SP)    ; KEY <- R50(COM)
+        MOV     4(SP),-(SP)     ; TREE <- TREE
+        JSR     PC,TPUT         ; TPUT(TREE,KEY,DATA)
         ADD     #6,SP           ; CLEAN UP STACK
 
-        MOV     #20,-(SP)       ; DATA <- 20
-        MOV     #2000,-(SP)     ; KEY <- 2000
-        MOV     R1,-(SP)        ; ROOT <- R1
-        JSR     PC,TPUT         ; TPUT(ROOT, KEY, DATA)
+START1:
+        JSR     PC,READPT       ; READPT()
+        BCS     START2          ; IF DONE, SKIP AHEAD
+
+        MOV     R0,(R4)         ; KEY <- CHLID KEY
+        MOV     R1,2(R4)        ; PARENT <- PARENT KEY
+        MOV     #-1,4(R4)       ; DISTANCE TO COM <- -1
+
+        MOV     R4,-(SP)        ; DATA <- ELEMENT
+        MOV     R0,-(SP)        ; KEY <- CHILD KEY
+        MOV     4(SP),-(SP)     ; TREE <- TREE
+        JSR     PC,TPUT         ; TPUT(TREE,KEY,DATA)
         ADD     #6,SP           ; CLEAN UP STACK
 
-        MOV     #400,-(SP)      ; KEY <- 400
-        MOV     R1,-(SP)        ; ROOT <- R1
-        JSR     PC,TGET         ; TGET(ROOT, KEY)
+        ADD     #6,R4           ; MOVE TO NEXT ELEMENT
+        BR      START1          ; NEXT LINE
+START2:
+        CLR     (R4)            ; LAST ELEMENT KEY <- 0
+
+        MOV     2(SP),R4        ; START AT THE BEGINNING
+        CLR     R2              ; CLEAR COUNT(LO)
+        CLR     R3              ; CLEAR COUNT(HI)
+START3:
+        TST     (R4)            ; CHECK THE ELEMENT KEY
+        BEQ     START4          ; IF NULL, SKIP OUT OF LOOP
+
+        MOV     (SP),-(SP)      ; TREE <- TREE
+        MOV     R4,-(SP)        ; ELEMENT <- ELEMENT
+        JSR     PC,DIST         ; DIST(ELEMENT,TREE)
         ADD     #4,SP           ; CLEAN UP STACK
+        ADD     R0,R2           ; ADD DISTANCE TO THE COUNT
+        ADC     R3              ; ADD CARRY
 
+        ADD     #6,R4           ; POINT TO NEXT ELEMENT
+        BR      START3          ; NEXT ELEMENT
+START4:
+        MOV     R2,-(SP)        ; ARG1 <- R2
+        MOV     R3,-(SP)        ; ARG0 <- R3
+        MOV     #PART1,-(SP)    ; FORMAT <- PART1
+        MOV     #STDOUT,-(SP)   ; STREAM < STDOUT
+        JSR     PC,FPRNTF       ; FPRNTF(STREAM,FORMAT,...)
+        ADD     #10,SP          ; CLEAN UP STACK
+
+START9:
+        ADD     #4,SP           ; CLEAN UP LOCALS
         HALT                    ; END OF PROGRAM
-        BR      START           ; START OVER
+        JMP     START           ; START OVER
+
+PART1:  .ASCII /PART 1: %lu/
+        .BYTE  15,12,0
         .EVEN
+;
+; DIST(ELEMENT, TREE)
+;
+; FIND THE DISTANCE OF THE ELEMENT TO COM
+;
+DIST:
+        MOV     R1,-(SP)        ; SAVE R1
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     R4,-(SP)        ; SAVE R4
+        MOV     R5,-(SP)        ; SAVE R5
+        MOV     14(SP),R1       ; R1 <- ELEMENT
+        MOV     16(SP),R2       ; R2 <- TREE
+        CLR     R3              ; R3 <- STACK DEPTH (0)
+        MOV     #4000,-(SP)     ; SIZE <- 4000(8)
+        JSR     PC,MALLOC       ; MALLOC(SIZE)
+        TST     (SP)+           ; CLEAN UP STACK
+        MOV     R0,R4           ; R4 <- ELEMENT STACK
+        MOV     #4000,R5        ; R5 <- ELEMENT STACK POINTER
+        ADD     R4,R5           ;
+
+DIST1:
+        MOV     4(R1),R0        ; CHECK THE DISTANCE
+        BPL     DIST8           ; IF IT'S POSITIVE, WE'RE DONE
+        MOV     R1,-(R5)        ; PUSH THIS ELEMENT
+        INC     R3              ; INCREMENT STACK DEPTH
+        MOV     2(R1),-(SP)     ; KEY <- PARENT
+        MOV     R2,-(SP)        ; TREE <- TREE
+        JSR     PC,TGET         ; TGET(TREE,KEY)
+        ADD     #4,SP           ; CLEAN UP STACK
+        MOV     R0,R1           ; THIS IS OUR NEW ELEMENT
+        BR      DIST1           ; CHECK THE DISTANCE
+
+DIST8:
+        TST     R3              ; CHECK STACK DEPTH
+        BEQ     DIST9           ; IF ZERO, WE'RE DONE
+        INC     R0              ; INCREMENT THE DISTANCE
+        DEC     R3              ; DECREMENT THE STACK DEPTH
+        MOV     (R5)+,R1        ; POP AN ELEMENT
+        MOV     R0,4(R1)        ; SET ITS DISTANCE
+        BR      DIST8           ; CHECK THE NEXT ELEMENT ON THE STACK
+DIST9:
+        MOV     R4,-(SP)        ; BLOCK <- R4
+        JSR     PC,FREE         ; FREE(BLOCK)
+        TST     (SP)+           ; CLEAN UP STACK
+        MOV     (SP)+,R5        ; RESTORE R5
+        MOV     (SP)+,R4        ; RESTORE R4
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        MOV     (SP)+,R1        ; RESTORE R1
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; READPT(): R0: ORBITER, R1: ORBITEE
+;
+; READ A LINE FROM PAPER TAPE
+; SET CARRY ON ERROR
+;
+READPT:
+        MOV     R2,-(SP)        ; STASH R2
+        SUB     #4,SP           ; LOCALS
+                                ; 0: BUFFER
+
+        MOV     SP,R2           ; R2 <- BUFFER
+        MOV     #4,-(SP)        ; NBYTE <- 4
+        MOV     R2,-(SP)        ; BUF <- BUFFER
+        MOV     #3,-(SP)        ; FILEDES <- 3 (PTIN)
+        JSR     PC,READ         ; READ(FILEDES, BUF, NBYTE)
+        CMP     #4,R0           ; DID WE READ FOUR BYTES?
+        BNE     READP7          ; NO, BAIL OUT
+        MOV     R2,-(SP)        ; S <- BUFFER
+        JSR     PC,STOR50       ; STOR50(S)
+        TST     (SP)+           ; CLEAN UP STACK
+        MOV     R0,R1           ; SAVE ORBITEE
+
+        JSR     PC,READ         ; READ(FILEDES, BUF, NBYTE)
+        CMP     #4,R0           ; DID WE READ FOUR BYTES?
+        BNE     READP7          ; NO, BAIL OUT
+        ADD     #6,SP           ; CLEAN UP STACK
+        MOV     R2,-(SP)        ; S <- BUFFER
+        JSR     PC,STOR50       ; STOR50(S)
+        TST     (SP)+           ; CLEAN UP STACK
+        BR      READP8          ; SKIP TO THE END
+READP7:
+        ADD     #12,SP          ; CLEAN UP STACK FROM READ AND LOCALS
+        SEC                     ; SET CARRY (ERROR)
+        BR      READP9          ; WE'RE DONE
+
+READP8: ADD     #4,SP           ; DEALLOCATE LOCALS
+        CLC                     ; CLEAR CARRY (NO ERROR)
+READP9: MOV     (SP)+,R2        ; RESTORE R2
+        RTS     PC              ; RETURN TO CALLER
 
 ;
 ; STOR50(S)
@@ -162,7 +305,7 @@ TGET0:
         MOV     2(R1),R0        ; IF EQUAL, RETURN DATA
         BR      TGET9           ; WE'RE DONE
 TGET1:
-        BGT     TGET2           ; IF KEY > ROOT.KEY, SKIP AHEAD
+        BHI     TGET2           ; IF KEY > ROOT.KEY, SKIP AHEAD
         ; HERE, KEY < ROOT.KEY
         TST     4(R1)           ; CHECK ROOT.LEFT
         BEQ     TGET9           ; IF NULL, WE'RE DONE
@@ -205,7 +348,7 @@ TPUT0:
         MOV     10(SP),2(R1)    ; IF EQUAL STORE DATA IN ROOT.DATA
         BR      TPUT9           ; WE'RE DONE
 TPUT1:
-        BGT     TPUT2           ; IF KEY > ROOT.KEY, SKIP AHEAD
+        BHI     TPUT2           ; IF KEY > ROOT.KEY, SKIP AHEAD
         ; HERE, KEY < ROOT.KEY.
         TST     4(R1)           ; CHECK ROOT.LEFT
         BNE     TPUT3           ; IF NOT NULL, SKIP AHEAD
@@ -379,7 +522,7 @@ FREE9:
 ;
 ; HEAP: MEMORY SPACE FOR DYNAMIC ALLOCATION
 ;
-HSIZE   =       40000
+HSIZE   =       100000
 HEAP:   .WORD   0               ; DUMMY WORD / FAKE SIZE
         .WORD   .+2             ; FIRST FREE
         .WORD   HSIZE-6         ; BLOCK 0 SIZE
