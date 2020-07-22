@@ -32,6 +32,11 @@ START:  MOV     #.,SP           ; SET UP STACK
                                 ; 0(SP): TREE
                                 ; 2(SP): ARRAY OF ORBITS
 
+        MOV     #BANNER,-(SP)   ; FORMAT <- BANNER
+        MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
+        JSR     PC,FPRNTF       ; FPRNTF(STREAM, FORMAT)
+        ADD     #4,SP           ; CLEAN UP STACK
+
         JSR     PC,TALLOC       ; TALLOC()
         MOV     R0,(SP)         ; TREE <- RESULT
 
@@ -94,12 +99,81 @@ START4:
         JSR     PC,FPRNTF       ; FPRNTF(STREAM,FORMAT,...)
         ADD     #10,SP          ; CLEAN UP STACK
 
+        ; PART 2:
+        ;  IF YOU.DISTANCE > SAN.DISTANCE
+        ;    YOU = YOU.PARENT; INCREMENT COUNT
+        ;  IF YOU.DISTANCE < SAN.DISTANCE
+        ;    SAN = SAN.PARENT; INCREMENT COUNT
+        ;  IF YOU.DISTANCE = SAN.DISTANCE AND YOU != SAN
+        ;    YOU = YOU.PARENT; INCREMENT COUNT
+        ;    SAN = SAN.PARENT; INCREMENT COUNT
+        MOV     #-2,R2          ; START COUNT AT MINUS TWO
+                                ;   (SINCE WE DON'T COUNT SAN AND YOU)
+        MOV     #117255,-(SP)   ; KEY <- R50(YOU)
+        MOV     2(SP),-(SP)     ; TREE <- TREE
+        JSR     PC,TGET         ; TGET(TREE,KEY)
+        ADD     #4,SP           ; CLEAN UP STACK
+        MOV     R0,R3           ; R3 <- YOU
+
+        MOV     #73366,-(SP)    ; KEY <- R50(SAN)
+        MOV     2(SP),-(SP)     ; TREE <- TREE
+        JSR     PC,TGET         ; TGET(TREE,KEY)
+        ADD     #4,SP           ; CLEAN UP STACK
+        MOV     R0,R4           ; R4 <- SAN
+
+START5:
+        CMP     4(R3),4(R4)     ; COMPARE DISTANCES
+        BGT     START6          ; IF GREATER, SKIP AHEAD
+        BEQ     START7          ; IF EQUAL, SKIP AHEAD
+        ; HERE, YOU.DISTANCE IS LESS THAN SAN.DISTANCE
+        MOV     2(R4),-(SP)     ; KEY <- SAN.PARENT
+        MOV     2(SP),-(SP)     ; TREE <- TREE
+        JSR     PC,TGET         ; TGET(TREE,KEY)
+        ADD     #4,SP           ; CLEAN UP STACK
+        MOV     R0,R4           ; SAN <- SAN.PARENT
+        INC     R2              ; INCREMENT COUNT
+        BR      START5          ; NEXT!
+START6: ; HERE, YOU.DISTANCE IS GREATER THAN SAN.DISTANCE
+        MOV     2(R3),-(SP)     ; KEY <- YOU.PARENT
+        MOV     2(SP),-(SP)     ; TREE <- TREE
+        JSR     PC,TGET         ; TGET(TREE,KEY)
+        ADD     #4,SP           ; CLEAN UP STACK
+        MOV     R0,R3           ; YOU <- YOU.PARENT
+        INC     R2              ; INCREMENT COUNT
+        BR      START5          ; NEXT!
+START7: ; HERE, YOU.DISTANCE IS EQUAL TO SAN.DISTANCE
+        CMP     R3,R4           ; ARE THEY THE SAME?
+        BEQ     START8          ; YES, WE'RE DONE
+        MOV     2(R4),-(SP)     ; KEY <- SAN.PARENT
+        MOV     2(SP),-(SP)     ; TREE <- TREE
+        JSR     PC,TGET         ; TGET(TREE,KEY)
+        ADD     #4,SP           ; CLEAN UP STACK
+        MOV     R0,R4           ; SAN <- SAN.PARENT
+        MOV     2(R3),-(SP)     ; KEY <- YOU.PARENT
+        MOV     2(SP),-(SP)     ; TREE <- TREE
+        JSR     PC,TGET         ; TGET(TREE,KEY)
+        ADD     #4,SP           ; CLEAN UP STACK
+        MOV     R0,R3           ; YOU <- YOU.PARENT
+        INC     R2              ; INCREMENT COUNT
+        INC     R2              ; INCREMENT COUNT
+        BR      START7          ; NEXT!
+START8:
+        MOV     R2,-(SP)        ; ARG0 <- COUNT
+        MOV     #PART2,-(SP)    ; FORMAT <- PART2
+        MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
+        JSR     PC,FPRNTF       ; FPRNTF(STREAM, FORMAT, ...)
+        ADD     #6,SP           ; CLEAN UP STACK
+
 START9:
         ADD     #4,SP           ; CLEAN UP LOCALS
         HALT                    ; END OF PROGRAM
         JMP     START           ; START OVER
 
+BANNER: .ASCII /ADVENT OF CODE 2019 DAY 6/
+        .BYTE  15,12,0
 PART1:  .ASCII /PART 1: %lu/
+        .BYTE  15,12,0
+PART2:  .ASCII /PART 2: %u/
         .BYTE  15,12,0
         .EVEN
 ;
