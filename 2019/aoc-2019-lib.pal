@@ -624,71 +624,65 @@ PTOUT:  .WORD   4
 ; MATH
 ;
 
-; MULWU(MULTIPLICAND, MULTIPLIER) -> R0: HI, R1: LO
+; MULWS(MULTIPLIER, MULTIPLICAND): R0, R1
 ;
-; UNSIGNED 16-BIT MULTIPLICATION
+; MULTIPLY WORDS SIGNED
 ;
-
-MULWU:  CLR     R0              ; CLEAR RESULT HI
-        CLR     R1              ; CLEAR RESULT LO
-
-        MOV     R2,-(SP)        ; SAVE R2
+; R0: RESULT HI
+; R1: RESULT LO
+MULWS:  MOV     R2,-(SP)        ; SAVE R2
         MOV     R3,-(SP)        ; SAVE R3
         MOV     R4,-(SP)        ; SAVE R4
-        MOV     10(SP),R2       ; R2 <- MULTIPLICAND
-        MOV     12(SP),R3       ; R3 <- MULTIPLIER
-        MOV     #20,R4          ; R4 <- COUNTER (16D)
 
-M0:     ASL     R1              ; ROTATE LO RESULT LEFT
-        ROL     R0              ;    AND HI
-        ROL     R3              ; ROTATE MULTIPLIER LEFT
-        BCC     M1              ; IF THE MSB WAS CLEAR, SKIP ADD
-        ADD     R2,R1           ; ADD MULTIPLICAND TO LO RESULT
-        ADC     R0              ;   AND HI
-M1:     DEC     R4              ; DECREMENT THE COUNTER
-        BNE     M0              ; IF NOT ZERO, REPEAT
+        CLR     R4              ; CLEAR RESULT SIGN BIT
+        MOV     10(SP),R0       ; MOVE MULTIPLIER TO R0
+        MOV     12(SP),R2       ; MOVE MULTIPLICAND TO R2
 
+        TST     R0              ; TEST THE MULTIPLIER
+        BPL     MULWS0          ; IF NOT NEGATIVE, SKIP TO MULTIPLICAND
+        NEG     R0              ; MAKE THE MULTIPLIER POSITIVE
+        COM     R4              ; FLIP THE RESULT SIGN BIT
+
+MULWS0: TST     R2              ; TEST THE MULTIPLICAND
+        BPL     MULWU0          ; IF NOT NEG, SKIP TO SHIFT-AND-ADD
+        NEG     R2              ; MAKE THE MULTIPLICAND POSITIVE
+        COM     R4              ; FLIP THE RESULT SIGN BIT
+        BR      MULWU0          ; BRANCH TO THE SHIFT-AND-ADD SECTION
+
+; MULWU(MULTIPLIER, MULTIPLICAND): R0, R1
+;
+; MULTIPLY WORDS UNSIGNED
+;
+; R0: RESULT HI
+; R1: RESULT LO
+MULWU:  MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     R4,-(SP)        ; SAVE R4
+
+        CLR     R4              ; CLEAR RESULT SIGN BIT
+        MOV     10(SP),R0       ; MOVE MULTIPLIER TO R0
+        MOV     12(SP),R2       ; MOVE MULTIPLICAND TO R2
+MULWU0: MOV     #20,R3          ; SET R3 COUNTER TO 16
+        CLR     R1              ; CLEAR RESULT LO
+
+MULWU1: ASL     R1              ; SHIFT LEFT RESULT LO
+        ROL     R0              ; ROTATE LEFT RESULT HI
+        BCC     MULWU2          ; CARRY CLEAR: NO NEED TO ADD
+        ADD     R2,R1           ; ADD MULTIPLICAND TO RESULT LO
+        ADC     R0              ; ADD CARRY (IF ANY) TO RESULT HI
+
+MULWU2: DEC     R3              ; DECREMENT COUNT
+        BNE     MULWU1          ; IF NOT DONE, NEXT DIGIT
+
+        TST     R4              ; CHECK THE RESULT SIGN BIT
+        BPL     MULWU9          ; IF NOT SET, SKIP TO THE END
+        COM     R0              ; COMPLIMENT RESULT HI
+        NEG     R1              ; TWO'S COMPLIMENT RESULT LO
+MULWU9:
         MOV     (SP)+,R4        ; RESTORE R4
         MOV     (SP)+,R3        ; RESTORE R3
         MOV     (SP)+,R2        ; RESTORE R2
-        RTS     PC              ; RETURN TO CALLER
-
-;
-; MULWS(MULTIPLICAND, MULTIPLIER) -> R0: HI, R1: LO
-;
-; SIGNED 16-BIT MULTIPLICATION
-;
-MULWS:
-        MOV     R2,-(SP)        ; SAVE R2
-        MOV     R3,-(SP)        ; SAVE R3
-        MOV     R4,-(SP)        ; SAVE R4
-
-        CLR     R2              ; CLEAR NEGATIVE FLAG
-        MOV     10(SP),R3       ; R3 <- MULTIPLICAND
-        MOV     12(SP),R4       ; R4 <- MULTIPLIER
-        TST     R3              ; CHECK MULTIPLICAND
-        BPL     MULWS1          ; IF IT'S POSITIVE, SKIP
-        NEG     R3              ; MAKE IT POSITIVE
-        INC     R2              ; TOGGLE NEGATIVE FLAG
-MULWS1: TST     R4              ; CHECK MULTIPLIER
-        BPL     MULWS2          ; IF IT'S POSITIVE, SKIP
-        NEG     R4              ; MAKE IT POSITIVE
-        INC     R2              ; TOGGLE NEGATIVE FLAG
-MULWS2: MOV     R4,-(SP)        ; MULTIPLICAND <- R4
-        MOV     R3,-(SP)        ; MULTIPLIER <- R3
-        JSR     PC,MULWU        ; MULWU(MULTIPLIER, MULTIPLICAND)
-        ADD     #4,SP           ; CLEAN UP STACK
-        BIT     #1,R2           ; CHECK NEGATIVE FLAG
-        BEQ     MULWS9          ; IF IT'S CLEAR, WE'RE DONE
-        COM     R0              ; COMPLIMENT HI(PRODUCT)
-        COM     R1              ; COMPLIMENT LO(PRODUCT)
-        ADD     #1,R1           ; INCREMENT LO(PRODUCT)
-        ADC     R0              ; ADD CARRY TO HI(PRODUCT)
-        BIS     #100000,R0      ; SET HI BIT OF HI(PRODUCT)
-MULWS9: MOV     (SP)+,R4        ; RESTORE R4
-        MOV     (SP)+,R3        ; RESTORE R3
-        MOV     (SP)+,R2        ; RESTORE R2
-        RTS     PC              ; RETURN TO CALLER
+        RTS     PC
 
 ;
 ; MULPU (M'CAND HI, M'CAND LO, MULTIPLIER HI, MULTIPLIER LO) ->
@@ -765,41 +759,70 @@ MULPS9:
         MOV     (SP)+,R5        ; RESTORE R5
         RTS     PC              ; RETURN TO CALLER
 
+;
+; DIVWS (DIVIDEND, DIVISOR) -> R0: QUOTIENT, R1: REMAINDER
+;
+; SIGNED 16-BIT DIVISION
+;
+DIVWS:  MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     R4,-(SP)        ; SAVE R4
+
+        CLR     R2              ; CLEAR FLAGS REGISTER
+        MOV     10(SP),R0       ; R0 <- DIVIDEND
+        MOV     12(SP),R3       ; R3 <- DIVISOR
+
+        TST     R3              ; CHECK DIVISOR
+        BPL     DIVWS0          ; IF POSITIVE, SKIP AHEAD
+        INC     R2              ; FLIP FLAG BIT 0 (SIGNS DIFFER)
+        NEG     R3              ; MAKE DIVISOR POSITIVE
+DIVWS0: TST     R0              ; CHECK DIVIDEND
+        BPL     DIVWU0          ; IF POSITIVE, SKIP TO UNSIGNED DIVIDE
+        INC     R2              ; FLIP FLAG BIT 0 (SIGNS DIFFER)
+        BIS     #4,R2           ; SET FLAG BIT 2 (DIVIDEND NEGATIVE)
+        NEG     R0              ; MAKE DIVIDEND POSITIVE
+        BR      DIVWU0          ; UNSIGNED DIVIDE LOOP
+
 ; DIVWU (DIVIDEND, DIVISOR) -> R0: QUOTIENT, R1: REMAINDER
 ;
 ; UNSIGNED 16-BIT DIVISION
 ;
-DIVWU:
-        TST     4(SP)           ; CHECK THE DIVISOR
-        BNE     DD1             ; IF NOT ZERO, CONTINUE
-        SEV                     ; SET OVERFLOW (ERROR)
-        RTS     PC              ; RETURN TO CALLER
-DD1:
-        MOV     R2,-(SP)        ; SAVE R2
+DIVWU:  MOV     R2,-(SP)        ; SAVE R2
         MOV     R3,-(SP)        ; SAVE R3
         MOV     R4,-(SP)        ; SAVE R4
 
-        CLR     R0              ; R0 <- QUOTIENT
-        CLR     R1              ; R1 <- REMAINDER
-        MOV     10(SP),R2       ; R2 <- DIVIDEND
+        CLR     R2              ; R2 <- FLAGS
+        MOV     10(SP),R0       ; R0 <- DIVIDEND
         MOV     12(SP),R3       ; R3 <- DIVISOR
+DIVWU0: TST     R3              ; CHECK THE DIVISOR
+        BNE     DIVWU1          ; IF NOT ZERO, CONTINUE
+        SEV                     ; ERROR: SET OVERFLOW
+        BR      DIVWU9          ; CLEAN UP AND EXIT
+DIVWU1: CLR     R1              ; R1 <- REMAINDER
         MOV     #20,R4          ; R4 <- COUNTER
-DD2:
-        ASL     R0              ; SHIFT QUOTIENT LEFT
-        ASL     R2              ; SHIFT DIVIDEND LEFT
+
+DIVWU2: ASL     R0              ; SHIFT DIVIDEND AND QUOTIENT LEFT
         ROL     R1              ; ROTATE REMAINDER LEFT, WITH CARRY
         CMP     R1,R3           ; IS DIVISOR <= REMAINDER?
-        BMI     DD3             ; NO, CONTINUE
+        BMI     DIVWU3          ; NO, CONTINUE
         SUB     R3,R1           ; REMAINDER -= DIVISOR
-        BIS     #1,R0           ; SET LOW BIT IN QUOTIENT
-DD3:
-        DEC     R4              ; DEC COUNTER
-        BNE     DD2             ; IF NOT ZERO, REPEAT
+        INC     R0              ; SET LOW BIT IN QUOTIENT
+DIVWU3: DEC     R4              ; DEC COUNTER
+        BNE     DIVWU2          ; IF NOT ZERO, REPEAT
+        CLV                     ; INDICATE NO ERROR
 
-        MOV     (SP)+,R4        ; RESTORE R4
+        BIT     #4,R2           ; CHECK THE DIVIDEND NEGATIVE FLAG
+        BEQ     DIVWU8          ; IF NOT SET, SKIP AHEAD
+        INC     R0              ; INCREMENT THE QUOTIENT
+        SUB     R3,R1           ; SUBTRACT DIVISOR FROM REMAINDER
+        NEG     R1              ; MAKE REMAINDER POSITIVE
+DIVWU8: BIT     #1,R2           ; CHECK THE QUOTIENT NEGATIVE FLAG
+        BEQ     DIVWU9          ; IF NOT SET, SKIP AHEAD
+        NEG     R0              ; MAKE QUOTIENT NEGATIVE
+
+DIVWU9: MOV     (SP)+,R4        ; RESTORE R4
         MOV     (SP)+,R3        ; RESTORE R3
         MOV     (SP)+,R2        ; RESTORE R2
-        CLV                     ; INDICATE NO ERROR
         RTS     PC              ; RETURN TO CALLER
 
 ; DIVDU (DIVIDEND HI, DIVIDEND LO, DIVISOR HI, DIVISOR LO, RESULT)
