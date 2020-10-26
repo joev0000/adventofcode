@@ -1,0 +1,327 @@
+; ADVENT OF CODE 2019: DAY 
+;
+; THIS PROGRAM CAN BE ASSEMBLED BY PAL-11A AND CAN BE RUN ON ANY
+; PDP-11 SYSTEM WITH A HIGH-SPEED PAPER TAPE READER.
+;
+; INPUT:  PAPER TAPE
+; OUTPUT: TTY
+;
+; START ADDRESS: 1000
+;
+
+;
+; SET UP REGISTER AND DEVICE LABELS
+;
+        R0=     %0              ; REGISTER 0
+        R1=     %1              ; REGISTER 1
+        R2=     %2              ; REGISTER 2
+        R3=     %3              ; REGISTER 3
+        R4=     %4              ; REGISTER 4
+        R5=     %5              ; REGISTER 5
+        SP=     %6              ; STACK POINTER
+        PC=     %7              ; PROGRAM COUNTER
+
+;
+; START OF PROGRAM
+;
+        .=      1000            ; ASSEMBLE AT ADDRESS 1000
+START:  MOV     #.,SP           ; SET UP STACK
+
+        MOV     #STDOUT,-(SP)   ; STREAM = STDOUT
+        MOV     #BANNER,-(SP)   ; S = BANNER
+        JSR     PC,FPUTS        ; FPUTS(S, STREAM)
+        ADD     #4,SP           ; CLEAN UP STACK
+
+        MOV     #1000,-(SP)     ; SIZE <- 512(10)
+        JSR     PC,MALLOC       ; MALLOC(SIZE)
+        TST     (SP)+           ; CLEAN UP STACK
+        MOV     R0,R2           ; R2 <- DEST
+
+        MOV     R2,-(SP)        ; DEST <- R2
+        MOV     #PTIN,-(SP)     ; STREAM <- PTIN
+        JSR     PC,PARSE        ; PARSE(STREAM, DEST)
+        ADD     #4,SP           ; CLEAN UP STACK
+        MOV     R0,R3           ; R3 <- INTEGERS READ
+
+        MOV     #1000,-(SP)     ; SIZE <- 512(10)
+        JSR     PC,ICINIT       ; ICINIT(SIZE)
+        TST     (SP)+           ; CLEAN UP STACK
+        MOV     R0,R4           ; R4 <- COMPUTER
+
+        MOV     R3,-(SP)        ; LENGTH <- R3
+        MOV     R2,-(SP)        ; SOURCE <- R2
+        MOV     R4,-(SP)        ; COMPUTER <- R4
+        JSR     PC,ICLOAD       ; ICLOAD(COMPUTER, SOURCE, LENGTH)
+        ADD     #6,SP           ; CLEAN UP STACK
+
+        MOV     #1,-(SP)        ; POSITION <- 1
+        MOV     R4,-(SP)        ; COMPUTER <- R4
+        JSR     PC,ICGETP       ; ICGET(COMPUTER, POSITION)
+        ADD     #4,SP           ; CLEAN UP STACK
+
+        HALT
+
+        ; Load the initial input data.
+
+        MOV     R4,-(SP)        ; COMPUTER <- R4
+START0: JSR     PC,ICSTEP       ; ICSTEP(COMPUTER)
+        CMP     #143,R0         ; CHECK FOR HALT
+        BEQ     START9          ; WE'RE DONE
+        BIT     #2,2(R4)        ; CHECK OUTPUT STATUS BIT
+        BNE     START1
+        MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
+        MOV     10(R4),-(SP)    ; VALUE LO <- OUT LO
+        MOV     12(R4),-(SP)    ; VALUE HI <- OUT HI
+        JSR     PC,FMTDU        ; FMTDU(HI, LO, STREAM)
+        ADD     #6,SP           ; CLEAN UP STACK
+        BIC     #2,2(R4)        ; CLEAR OUTPUT AVAILABLE BIT
+START1: ; load next input value into buffer.
+        BR      START0          ; NEXT STEP
+START9: TST     (SP)+           ; CLEAN UP STACK
+
+        MOV     R2,-(SP)        ; PTR <- R2
+        JSR     PC,FREE         ; FREE(PTR)
+        MOV     R4,(SP)         ; PTR <- R4
+        JSR     PC,FREE         ; FREE(PTR)
+        TST     (SP)+           ; CLEAN UP STACK
+        HALT                    ; THAT'S ALL, FOLKS!
+
+
+;
+; PARSE(STREAM, DEST)
+;
+; PARSE COMMA SEPERATED LIST OF 32 BIT INTEGERS INTO MEMORY AT THE
+; GIVEN LOCATION.
+; RETURN NUMBER OF INTEGERS READ
+;
+PARSE:  MOV     R2,-(SP)        ; SAVE R1
+        MOV     6(SP),R2        ; R2 <- DEST
+
+        MOV     4(SP),-(SP)     ; STREAM <- STREAM
+PARSE0: JSR     PC,PRSWU        ; PRSWU(STREAM)
+        MOV     R0,(R2)+        ; WRITE HI
+        MOV     R1,(R2)+        ; WRITE LO
+
+        JSR     PC,FGETC        ; FGETC(STREAM)
+        CMP     #',,R0          ; IS IT A COMMA
+        BEQ     PARSE0          ; IF SO, PARSE NEXT VALUE
+        TST     (SP)+           ; CLEAN UP STACK
+
+        MOV     R2,R0           ; R2 <- LAST WORD IN DEST
+        SUB     6(SP),R0        ; R0 <- NUMBER OF WORDS IN DEST
+        ASR     R0              ;
+        ASR     R0              ; DIVIDE BY FOUR TO GET INTEGERS READ
+
+        MOV     (SP)+,R2        ; RESTORE R2
+        RTS     PC              ; RETURN TO CALLER
+
+
+; COMPUTER:
+;  0(SP): PC
+;  2(SP): STATUS
+;       : BIT  0: INPUT AVAILABLE
+;       : BIT  1: OUTPUT AVAILABLE
+;       : BIT 15: HALTED
+;  4(SP): INPUT BUFFER
+; 10(SP): OUTPUT BUFFER
+; 14(SP): MEMORY
+
+;
+; ICINIT(SIZE)
+;
+; ALLOCATE AND INTIALIZE AN INTCODE COMPUTER
+;
+ICINIT: MOV     R1,-(SP)        ; SAVE R1
+        MOV     4(SP),R0        ; R0 <- SIZE
+        ASL     R0              ; R0 <- SPACE NEEDED FOR IC WORD MEMORY
+        ADD     #14,R0          ; R0 <- SPACE NEEDED FOR IC
+        MOV     R0,R1           ; R1 <- SPACE NEEDED FOR IC
+        MOV     R0,-(SP)        ; SIZE <- SPACE NEEDED FOR IC
+        JSR     PC,MALLOC       ; MALLOC(SIZE)
+        TST     (SP)+           ; CLEAN UP STACK
+
+        ADD     R0,R1           ; R1 <- END OF MEMORY
+ICINI0: CLR     -(R1)           ; CLEAR MEMORY
+        CMP     R0,R1           ; ARE WE AT THE BEGINNING?
+        BNE     ICINI0          ; IF NOT, MOVE TO PREVIOUS WORD
+
+        MOV     (SP)+,R1        ; RESTORE R1
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; ICIN(COMPUTER, VALUE LO, VALUE HI)
+;
+; ADD AN ENTRY TO THE INPUT BUFFER
+;
+ICIN:   MOV     2(SP),R0        ; R0 <- COMPUTER
+        BIS     #1,@2(R0)       ; SET BIT 0 OF STATUS
+        MOV     4(SP),@4(R0)    ; WRITE LO VALUE
+        MOV     6(SP),@6(R0)    ; WRITE HI VALUE
+
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; ICOUT(COMPUTER): R0 VALUE HI, R1 VALUE LO
+;
+; GET THE VALUE FROM OUTPUT BUFFER, CLEARING THE OUTPUT FLAG
+
+ICOUT:  MOV     2(SP),R0        ; R0 <- COMPUTER
+        BIC     #2,@2(R0)       ; CLEAR BIT 1 OF STATUS
+        MOV     @10(R0),R1      ; GET LO VALUE
+        MOV     @12(R0),R0      ; GET HI VALUE
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; ICGETP(COMPUTER, POSITION): R0 VALUE HI, R1 VALUE LO
+;
+; GET THE VALUE AT THE LOCATION GIVEN BY THE POSITION
+;
+ICGETP: MOV     2(SP),R0        ; R0 <- COMPUTER
+        MOV     4(SP),R1        ; R1 <- POSITION
+
+        MOV     R1,-(SP)        ; POSITION <- xx
+        MOV     R0,-(SP)        ; COMPUTER <- xx
+        JSR     PC,ICGETI
+        ADD     #4,SP           ; CLEAN UP STACK
+
+        MOV     2(SP),R0        ; R0 <- COMPUTER
+        BR      ICGET0
+
+;
+; ICGETI(COMPUTER, POSITION): R0 VALUE HI, R1 VALUE LO
+;
+; GET THE IMMEDIATE VALUE AT THE GIVEN POSITION
+;
+ICGETI: MOV     2(SP),R0        ; R0 <- COMPUTER
+        MOV     4(SP),R1        ; R1 <- POSITION
+ICGET0: ASL     R1              ; R1 <- POSITION * 2
+        ASL     R1              ; R1 <- POSITION * 4
+        ADD     #14,R1          ; R1 <- LOCATION MEMORY OFFSET
+        ADD     R0,R1           ; R1 <- MEMORY LOCATION WITH HI
+        MOV     (R1)+,R0        ; R0 <- VALUE HI
+        MOV     (R1),R1         ; R1 <- VALUE LO
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; ICPUTP(COMPUTER, POSITION, VALUE LO, VALUE HI)
+;
+; WRITE THE VALUE TO THE GIVEN POSITION
+;
+ICPUTP: MOV     R0,-(SP)        ; SAVE R0
+        MOV     R1,-(SP)        ; SAVE R1
+
+        MOV     6(SP),R0        ; R0 <- COMPUTER
+        MOV     10(SP),R1       ; R1 <- POSITION
+        ASL     R1              ; R1 <- POSITION * 2
+        ASL     R1              ; R1 <- POSITION * 4
+        ADD     #14,R1          ; R1 <- LOCATION MEMORY OFFSET
+        ADD     R0,R1           ; R1 <- MEMORY LOCATION WITH HI
+        MOV     14(SP),(R1)+    ; HI <- HI
+        MOV     12(SP),(R1)     ; LO <- LO
+
+        MOV     (SP)+,R1        ; RESTORE R1
+        MOV     (SP)+,R0        ; RESTORE R0
+        RTS     PC              ; RETURN TO CALLER
+;
+; ICLOAD(COMPUTER, SOURCE, LENGTH)
+;
+; LOAD THE VALUES FROM SOURCE INTO MEMORY AT POS 0
+ICLOAD: MOV     R1,-(SP)        ; SAVE R1
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+
+        MOV     14(SP),R3       ; R3 <- LENGTH IN IC WORDS
+        ASL     R3              ; R3 <- LENGTH IN PDP WORDS
+        ASL     R3              ; R3 <- LENGTH IN BYTES
+        MOV     12(SP),R1       ; R1 <- SOURCE
+        ADD     R3,R1           ; R1 <- END OF SOURCE
+        MOV     10(SP),R2       ; R2 <- COMPUTER
+        ADD     #14,R2          ; R2 <- MEMORY
+        ADD     R3,R2           ; R2 <- END OF MEMORY
+        ASR     R3              ; R3 <- LENGTH IN PDP WORDS
+
+        TST     R3              ; CHECK THE REMAINING WORDS
+ICLOA0: BEQ     ICLOA9          ; IF NO MORE WORDS, WE'RE DONE
+        MOV     (R1)-,(R2)-     ; COPY THE WORD
+        DEC     R3              ; DECREMENT THE COUNT
+        BR      ICLOA0          ; NEXT
+
+ICLOA9: MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        MOV     (SP)+,R1        ; RESTORE R1
+        RTS     PC              ; RETURN TO CALLER
+;
+; ICSTEP(COMPUTER)
+;
+; EXECUTE A SINGLE INSTRUCTION
+; R0:   0: AN INSTRUCTION WAS SUCCESSFULLY RUN
+;       1: AN IN OPERATION CALLED WITH AN EMPTY BUFFER
+;       2: ILLEGAL MEMORY ACCESS
+;     143: COMPUTER IS HALTED
+;
+ICSTEP: MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     2(SP),R2        ; R2 <- COMPUTER
+        MOV     (R2),R3         ; R3 <- PC
+
+        MOV     R3,-(SP)        ; POSITION <- R3
+        MOV     R2,-(SP)        ; COMPUTER <- R2
+        JSR     PC,ICGETI       ; ICGETI(COMPUTER, POSITION)
+        ADD     #4,SP           ; CLEAN UP STACK
+        INC     (R2)            ; INCREMENT PC
+
+; divide by 100: quotient is modes, remainder is op
+        CMP     #143,R1         ; CHECK FOR HALT
+        BEQ     ICSTE8          ; HANDLE HALT
+        ; look up command in table
+        CLR     R0              ; COMMAND SUCCESS
+        BR      ICSTE9          ; CLEAN UP AND RETURN
+
+ICSTE8: MOV     #143,R0         ; RETURN 99(10)
+        BIS     #100000,2(R2)   ; SET HALT STATUS
+
+ICSTE9: MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; ICADD(COMPUTER, MODES)
+;
+; EXECUTE INTCODE ADD INSTRUCTION
+;
+; WORK IN PROGRESS...
+ICADD:
+        MOV     4(SP),R0        ; R0 <- MODES
+        MOV     2(SP),R2        ; R2 <- COMPUTER
+
+        MOV     #12,-(SP)       ; DIVISOR <- 10(10)
+        MOV     R0,-(SP)        ; DIVIDEND <- MODES
+        JSR     PC,DIVWU        ; DIVWU(DIVIDEND, DIVISOR)
+        ADD     #4,SP           ; CLEAN UP STACK
+        TST     R1              ; CHECK THE MODE
+        BNE     ICADD0          ; IF NOT ZERO, SKIP AHEAD
+
+        JSR     PC,ICGETP
+ICADD0:
+        JSR     PC,ICGETI
+
+        MOV     R1,R5
+        MOV     R0,R4
+
+        ; ...
+        ADD     R1,R5
+        ADC     R4
+        ADD     R0,R4
+        ; ...
+
+        JSR     PC,ICPUTP
+        RTS     PC
+;
+; STATIC DATA
+;
+BANNER: .ASCII  "ADVENT OF CODE 2019 DAY 7"
+CRLF:   .BYTE   15,12,0         ; CR,LF
+PART1:  .ASCII  "PART 1: "
+        .BYTE   0
+PART2:  .ASCII  "PART 2: "
+        .BYTE   0
