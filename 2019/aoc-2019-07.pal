@@ -32,7 +32,7 @@ START:  MOV     #.,SP           ; SET UP STACK
         JSR     PC,FPUTS        ; FPUTS(S, STREAM)
         ADD     #4,SP           ; CLEAN UP STACK
 
-        MOV     #1000,-(SP)     ; SIZE <- 512(10)
+        MOV     #2000,-(SP)     ; SIZE <- 1024(10)
         JSR     PC,MALLOC       ; MALLOC(SIZE)
         TST     (SP)+           ; CLEAN UP STACK
         MOV     R0,R2           ; R2 <- DEST
@@ -43,7 +43,7 @@ START:  MOV     #.,SP           ; SET UP STACK
         ADD     #4,SP           ; CLEAN UP STACK
         MOV     R0,R3           ; R3 <- INTEGERS READ
 
-        MOV     #1000,-(SP)     ; SIZE <- 512(10)
+        MOV     #2000,-(SP)     ; SIZE <- 1024(10)
         JSR     PC,ICINIT       ; ICINIT(SIZE)
         TST     (SP)+           ; CLEAN UP STACK
         MOV     R0,R4           ; R4 <- COMPUTER
@@ -54,14 +54,10 @@ START:  MOV     #.,SP           ; SET UP STACK
         JSR     PC,ICLOAD       ; ICLOAD(COMPUTER, SOURCE, LENGTH)
         ADD     #6,SP           ; CLEAN UP STACK
 
-        MOV     #1,-(SP)        ; POSITION <- 1
-        MOV     R4,-(SP)        ; COMPUTER <- R4
-        JSR     PC,ICGETP       ; ICGET(COMPUTER, POSITION)
-        ADD     #4,SP           ; CLEAN UP STACK
-
-        HALT
-
-        ; Load the initial input data.
+;        MOV     #14,22(R4)
+;        MOV     #2,26(R4)
+;        MOV     #73,22(R4)
+;        MOV     #44,26(R4)
 
         MOV     R4,-(SP)        ; COMPUTER <- R4
 START0: JSR     PC,ICSTEP       ; ICSTEP(COMPUTER)
@@ -179,8 +175,8 @@ ICOUT:  MOV     2(SP),R0        ; R0 <- COMPUTER
 ICGETP: MOV     2(SP),R0        ; R0 <- COMPUTER
         MOV     4(SP),R1        ; R1 <- POSITION
 
-        MOV     R1,-(SP)        ; POSITION <- xx
-        MOV     R0,-(SP)        ; COMPUTER <- xx
+        MOV     R1,-(SP)        ; POSITION <- R1
+        MOV     R0,-(SP)        ; COMPUTER <- R0
         JSR     PC,ICGETI
         ADD     #4,SP           ; CLEAN UP STACK
 
@@ -212,10 +208,15 @@ ICPUTP: MOV     R0,-(SP)        ; SAVE R0
 
         MOV     6(SP),R0        ; R0 <- COMPUTER
         MOV     10(SP),R1       ; R1 <- POSITION
+
+        MOV     R1,-(SP)        ; POSITION <- R1
+        MOV     R0,-(SP)        ; COMPUTER <- R0
+        JSR     PC,ICGETI       ; ICGETI(COPUTER, POSITION)
+        ADD     #4,SP           ; CLEAN UP STACK
         ASL     R1              ; R1 <- POSITION * 2
         ASL     R1              ; R1 <- POSITION * 4
         ADD     #14,R1          ; R1 <- LOCATION MEMORY OFFSET
-        ADD     R0,R1           ; R1 <- MEMORY LOCATION WITH HI
+        ADD     6(SP),R1        ; R1 <- MEMORY LOCATION WITH HI
         MOV     14(SP),(R1)+    ; HI <- HI
         MOV     12(SP),(R1)     ; LO <- LO
 
@@ -261,7 +262,8 @@ ICLOA9: MOV     (SP)+,R3        ; RESTORE R3
 ;
 ICSTEP: MOV     R2,-(SP)        ; SAVE R2
         MOV     R3,-(SP)        ; SAVE R3
-        MOV     2(SP),R2        ; R2 <- COMPUTER
+        MOV     R4,-(SP)        ; SAVE R4
+        MOV     10(SP),R2       ; R2 <- COMPUTER
         MOV     (R2),R3         ; R3 <- PC
 
         MOV     R3,-(SP)        ; POSITION <- R3
@@ -270,52 +272,141 @@ ICSTEP: MOV     R2,-(SP)        ; SAVE R2
         ADD     #4,SP           ; CLEAN UP STACK
         INC     (R2)            ; INCREMENT PC
 
-; divide by 100: quotient is modes, remainder is op
+        MOV     #144,-(SP)      ; DIVISOR <- 100(10)
+        MOV     R1,-(SP)        ; DIVIDEND <- LO
+        JSR     PC,DIVWU        ; DIVWU(DIVIDEND, DIVISOR)
+        ADD     #4,SP           ; CLEAN UP STACK
+
         CMP     #143,R1         ; CHECK FOR HALT
-        BEQ     ICSTE8          ; HANDLE HALT
-        ; look up command in table
+        BNE     ICSTE0          ; NOT HALT
+        MOV     R1,R0           ; R0 <- R1 (143)
+        BIS     #100000,2(R2)   ; SET HALT STATUS FLAG
+        BR      ICSTE9          ; DONE
+ICSTE0: ASL     R1              ; OP OFFSET IN TABLE
+        ADD     #ICOP,R1        ; ADD TABLE OFFSET
+        MOV     (R1),R4         ; R4 <- OP
+        MOV     R0,-(SP)        ; MODES <- QUOTIENT
+        MOV     R2,-(SP)        ; COMPUTER <- COMPUTER
+        JSR     PC,(R4)         ; (OP)(COMPUTER, MODES)
+        ADD     #4,SP           ; CLEAN UP STACK
         CLR     R0              ; COMMAND SUCCESS
-        BR      ICSTE9          ; CLEAN UP AND RETURN
 
-ICSTE8: MOV     #143,R0         ; RETURN 99(10)
-        BIS     #100000,2(R2)   ; SET HALT STATUS
-
-ICSTE9: MOV     (SP)+,R3        ; RESTORE R3
+ICSTE9: MOV     (SP)+,R4        ; RESTORE R4
+        MOV     (SP)+,R3        ; RESTORE R3
         MOV     (SP)+,R2        ; RESTORE R2
         RTS     PC              ; RETURN TO CALLER
+
+
+; ICPARM(COMPUTER, MODES): R0 HI, R1 LO
+;
+; GET THE PARAMETER VALUE FROM THE CURRENT PC
+;
+ICPARM: MOV     R2,-(SP)        ; SAVE R2
+
+        MOV     4(SP),R2        ; R2 <- COMPUTER
+
+        MOV     #12,-(SP)       ; DIVISOR <- 10(10)
+        MOV     10(SP),-(SP)    ; DIVIDEND <- MODES
+        JSR     PC,DIVWU        ; DIVWU(DIVIDEND, DIVISOR)
+        MOV     R0,12(SP)       ; STASH REMAINING MODES IN ARG
+        ADD     #4,SP           ; CLEAN UP STACK
+
+        MOV     (R2),-(SP)      ; POSITION <- PC
+        MOV     R2,-(SP)        ; COMPUTER <- COMPUTER
+        TST     R1              ; CHECK MODE
+        BNE     ICPAR0          ; IF NON-ZERO, SKIP AHEAD
+        JSR     PC,ICGETP       ; ICGETP(COMPUTER, POSITION)
+        BR      ICPAR1
+ICPAR0: JSR     PC,ICGETI       ; ICGETI(COMPUTER, POSITION)
+ICPAR1: ADD     #4,SP           ; CLEAN UP STACK
+        INC     (R2)            ; INCREMENT PC
+        MOV     (SP)+,R2        ; RESTORE R2
+        RTS     PC              ; RETURN TO CALLER
+
 
 ;
 ; ICADD(COMPUTER, MODES)
 ;
 ; EXECUTE INTCODE ADD INSTRUCTION
 ;
-; WORK IN PROGRESS...
-ICADD:
-        MOV     4(SP),R0        ; R0 <- MODES
-        MOV     2(SP),R2        ; R2 <- COMPUTER
+ICADD:  MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     R4,-(SP)        ; SAVE R4
+        MOV     R5,-(SP)        ; SAVE R5
 
-        MOV     #12,-(SP)       ; DIVISOR <- 10(10)
-        MOV     R0,-(SP)        ; DIVIDEND <- MODES
-        JSR     PC,DIVWU        ; DIVWU(DIVIDEND, DIVISOR)
+        MOV     12(SP),R2       ; R2 <- COMPUTER
+        MOV     14(SP),R3       ; R3 <- MODES
+
+        MOV     R3,-(SP)        ; MODES <- R3
+        MOV     R2,-(SP)        ; COMPUTER <- R2
+        JSR     PC,ICPARM       ; ICPARM(COMPUTER, MODES)
+        MOV     R1,R5           ; SET LO
+        MOV     R0,R4           ; SET HI
+        JSR     PC,ICPARM       ; ICPARM(COMPUTER, MODES)
+        ADD     R1,R5           ; ADD LO
+        ADC     R4              ; ADD CARRY TO HI
+        ADD     R0,R4           ; ADD HI
         ADD     #4,SP           ; CLEAN UP STACK
-        TST     R1              ; CHECK THE MODE
-        BNE     ICADD0          ; IF NOT ZERO, SKIP AHEAD
 
-        JSR     PC,ICGETP
-ICADD0:
-        JSR     PC,ICGETI
+        MOV     R4,-(SP)        ; HI <- HI
+        MOV     R5,-(SP)        ; LO <- LO
+        MOV     (R2),-(SP)      ; POSITION <- PC
+        MOV     R2,-(SP)        ; COMPUTER <- COMPUTER
+        JSR     PC,ICPUTP       ; ICPUTP(COMPUTER, POSITION, LO, HI)
+        ADD     #10,SP          ; CLEAN UP STACK
+        INC     (R2)            ; INCREMENT PC
 
-        MOV     R1,R5
-        MOV     R0,R4
+        MOV     (SP)+,R5        ; RESTORE R5
+        MOV     (SP)+,R4        ; RESTORE R4
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        RTS     PC              ; RETURN TO CALLER
+;
+; ICMUL(COMPUTER, MODES)
+;
+; EXECUTE INTCODE MULTIPLY INSTRUCTION
+;
+ICMUL:  MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     R4,-(SP)        ; SAVE R4
+        MOV     R5,-(SP)        ; SAVE R5
 
-        ; ...
-        ADD     R1,R5
-        ADC     R4
-        ADD     R0,R4
-        ; ...
+        MOV     12(SP),R2       ; R2 <- COMPUTER
+        MOV     14(SP),R3       ; R3 <- MODES
 
-        JSR     PC,ICPUTP
-        RTS     PC
+        MOV     R3,-(SP)        ; MODES <- R3
+        MOV     R2,-(SP)        ; COMPUTER <- R2
+        JSR     PC,ICPARM       ; ICPARM(COMPUTER, MODES)
+        MOV     R1,R5           ; SET LO
+        MOV     R0,R4           ; SET HI
+        JSR     PC,ICPARM       ; ICPARM(COMPUTER, MODES)
+        ADD     #4,SP           ; CLEAN UP STACK
+
+        MOV     R1,-(SP)        ; MULTIPLIER LO <- R1
+        MOV     R0,-(SP)        ; MULTIPLIER HI <- R0
+        MOV     R5,-(SP)        ; MULTIPLICAND LO <- R5
+        MOV     R4,-(SP)        ; MULTIPLICAND HI <- R4
+        JSR     PC,MULPU        ; MULPU(HI, LO, HI, LO)
+        ADD     #10,SP          ; CLEAN UP STACK
+
+        MOV     R0,-(SP)        ; HI <- HI
+        MOV     R1,-(SP)        ; LO <- LO
+        MOV     (R2),-(SP)      ; POSITION <- PC
+        MOV     R2,-(SP)        ; COMPUTER <- COMPUTER
+        JSR     PC,ICPUTP       ; ICPUTP(COMPUTER, POSITION, LO, HI)
+        ADD     #10,SP          ; CLEAN UP STACK
+        INC     (R2)            ; INCREMENT PC
+
+        MOV     (SP)+,R5        ; RESTORE R5
+        MOV     (SP)+,R4        ; RESTORE R4
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        RTS     PC              ; RETURN TO CALLER
+
+; INTCODE OPERATION TABLE
+ICOP:   .WORD   0
+        .WORD   ICADD
+        .WORD   ICMUL
 ;
 ; STATIC DATA
 ;
