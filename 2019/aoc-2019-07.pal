@@ -74,6 +74,10 @@ START0: JSR     PC,ICSTEP       ; ICSTEP(COMPUTER)
         MOV     #STDIN,-(SP)    ; STREAM <- STDIN
         JSR     PC,PRSWU        ; PRSWU(STREAM)
         TST     (SP)+           ; CLEAN UP STACK
+        MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
+        MOV     #CRLF,-(SP)     ; S <- CRLF
+        JSR     PC,FPUTS        ; FPUTS(S, STREAM)
+        ADD     #4,SP           ; CLEAN UP STACK
         MOV     R0,-(SP)        ; HI
         MOV     R1,-(SP)        ; LO
         MOV     R4,-(SP)        ; COMPUTER
@@ -180,8 +184,8 @@ ICIN:   MOV     2(SP),R0        ; R0 <- COMPUTER
 
 ICOUT:  MOV     2(SP),R0        ; R0 <- COMPUTER
         BIC     #2,2(R0)        ; CLEAR BIT 1 OF STATUS
-        MOV     10(R0),R0       ; GET HI VALUE
         MOV     12(R0),R1       ; GET LO VALUE
+        MOV     10(R0),R0       ; GET HI VALUE
         RTS     PC              ; RETURN TO CALLER
 
 ;
