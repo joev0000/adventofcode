@@ -21,18 +21,25 @@
         SP=     %6              ; STACK POINTER
         PC=     %7              ; PROGRAM COUNTER
 
+
+        ICSIZE=4000             ; SIZE OF INTCODE MEMORY
+
 ;
 ; START OF PROGRAM
 ;
         .=      1000            ; ASSEMBLE AT ADDRESS 1000
 START:  MOV     #.,SP           ; SET UP STACK
 
+        ; PRINT BANNER
+
         MOV     #STDOUT,-(SP)   ; STREAM = STDOUT
         MOV     #BANNER,-(SP)   ; S = BANNER
         JSR     PC,FPUTS        ; FPUTS(S, STREAM)
         ADD     #4,SP           ; CLEAN UP STACK
 
-        MOV     #2000,-(SP)     ; SIZE <- 1024(10)
+        ; PARSE INTCODE PROGRAM
+
+        MOV     #ICSIZE,-(SP)   ; SIZE <- ICSIZE
         JSR     PC,MALLOC       ; MALLOC(SIZE)
         TST     (SP)+           ; CLEAN UP STACK
         MOV     R0,R2           ; R2 <- DEST
@@ -43,7 +50,9 @@ START:  MOV     #.,SP           ; SET UP STACK
         ADD     #4,SP           ; CLEAN UP STACK
         MOV     R0,R3           ; R3 <- INTEGERS READ
 
-        MOV     #2000,-(SP)     ; SIZE <- 1024(10)
+        ; ALLOCATE AND INITIALIZE INTCODE COMPUTER
+
+        MOV     ICSIZE,-(SP)    ; SIZE <- ICSIZE
         JSR     PC,ICINIT       ; ICINIT(SIZE)
         TST     (SP)+           ; CLEAN UP STACK
         MOV     R0,R4           ; R4 <- COMPUTER
@@ -54,25 +63,31 @@ START:  MOV     #.,SP           ; SET UP STACK
         JSR     PC,ICLOAD       ; ICLOAD(COMPUTER, SOURCE, LENGTH)
         ADD     #6,SP           ; CLEAN UP STACK
 
-;        MOV     #14,22(R4)
-;        MOV     #2,26(R4)
-;        MOV     #73,22(R4)
-;        MOV     #44,26(R4)
+        ; MAIN LOOP
 
         MOV     R4,-(SP)        ; COMPUTER <- R4
 START0: JSR     PC,ICSTEP       ; ICSTEP(COMPUTER)
         CMP     #143,R0         ; CHECK FOR HALT
         BEQ     START9          ; WE'RE DONE
-        BIT     #2,2(R4)        ; CHECK OUTPUT STATUS BIT
-        BNE     START1
+        CMP     #1,R0           ; CHECK FOR INPUT NEEDED
+        BNE     START1          ; IF NONE NEEDED, SKIP AHEAD
+        MOV     #STDIN,-(SP)    ; STREAM <- STDIN
+        JSR     PC,PRSWU        ; PRSWU(STREAM)
+        TST     (SP)+           ; CLEAN UP STACK
+        MOV     R0,-(SP)        ; HI
+        MOV     R1,-(SP)        ; LO
+        MOV     R4,-(SP)        ; COMPUTER
+        JSR     PC,ICIN         ; ICIN(COMPUTER, LO, HI)
+        ADD     #6,SP           ; CLEAN UP STACK
+START1: BIT     #2,2(R4)        ; CHECK OUTPUT STATUS BIT
+        BEQ     START2          ; NO OUTPUT, SKIP AHEAD
+        JSR     PC,ICOUT        ; ICOUT(COMPUTER)
         MOV     #STDOUT,-(SP)   ; STREAM <- STDOUT
-        MOV     10(R4),-(SP)    ; VALUE LO <- OUT LO
-        MOV     12(R4),-(SP)    ; VALUE HI <- OUT HI
+        MOV     R1,-(SP)        ; VALUE LO <- OUT LO
+        MOV     R0,-(SP)        ; VALUE HI <- OUT HI
         JSR     PC,FMTDU        ; FMTDU(HI, LO, STREAM)
         ADD     #6,SP           ; CLEAN UP STACK
-        BIC     #2,2(R4)        ; CLEAR OUTPUT AVAILABLE BIT
-START1: ; load next input value into buffer.
-        BR      START0          ; NEXT STEP
+START2: BR      START0          ; NEXT STEP
 START9: TST     (SP)+           ; CLEAN UP STACK
 
         MOV     R2,-(SP)        ; PTR <- R2
@@ -118,8 +133,10 @@ PARSE0: JSR     PC,PRSWU        ; PRSWU(STREAM)
 ;       : BIT  0: INPUT AVAILABLE
 ;       : BIT  1: OUTPUT AVAILABLE
 ;       : BIT 15: HALTED
-;  4(SP): INPUT BUFFER
-; 10(SP): OUTPUT BUFFER
+;  4(SP): INPUT BUFFER HI
+;  6(SP): INPUT BUFFER LO
+; 10(SP): OUTPUT BUFFER HI
+; 12(SP): OUTPUT BUFFER LO
 ; 14(SP): MEMORY
 
 ;
@@ -150,9 +167,9 @@ ICINI0: CLR     -(R1)           ; CLEAR MEMORY
 ; ADD AN ENTRY TO THE INPUT BUFFER
 ;
 ICIN:   MOV     2(SP),R0        ; R0 <- COMPUTER
-        BIS     #1,@2(R0)       ; SET BIT 0 OF STATUS
-        MOV     4(SP),@4(R0)    ; WRITE LO VALUE
-        MOV     6(SP),@6(R0)    ; WRITE HI VALUE
+        BIS     #1,2(R0)        ; SET BIT 0 OF STATUS
+        MOV     6(SP),4(R0)     ; WRITE HI VALUE
+        MOV     4(SP),6(R0)     ; WRITE LO VALUE
 
         RTS     PC              ; RETURN TO CALLER
 
@@ -162,9 +179,9 @@ ICIN:   MOV     2(SP),R0        ; R0 <- COMPUTER
 ; GET THE VALUE FROM OUTPUT BUFFER, CLEARING THE OUTPUT FLAG
 
 ICOUT:  MOV     2(SP),R0        ; R0 <- COMPUTER
-        BIC     #2,@2(R0)       ; CLEAR BIT 1 OF STATUS
-        MOV     @10(R0),R1      ; GET LO VALUE
-        MOV     @12(R0),R0      ; GET HI VALUE
+        BIC     #2,2(R0)        ; CLEAR BIT 1 OF STATUS
+        MOV     10(R0),R0       ; GET HI VALUE
+        MOV     12(R0),R1       ; GET LO VALUE
         RTS     PC              ; RETURN TO CALLER
 
 ;
@@ -289,7 +306,6 @@ ICSTE0: ASL     R1              ; OP OFFSET IN TABLE
         MOV     R2,-(SP)        ; COMPUTER <- COMPUTER
         JSR     PC,(R4)         ; (OP)(COMPUTER, MODES)
         ADD     #4,SP           ; CLEAN UP STACK
-        CLR     R0              ; COMMAND SUCCESS
 
 ICSTE9: MOV     (SP)+,R4        ; RESTORE R4
         MOV     (SP)+,R3        ; RESTORE R3
@@ -356,6 +372,7 @@ ICADD:  MOV     R2,-(SP)        ; SAVE R2
         ADD     #10,SP          ; CLEAN UP STACK
         INC     (R2)            ; INCREMENT PC
 
+        CLR     R0              ; INDICATE SUCCESS
         MOV     (SP)+,R5        ; RESTORE R5
         MOV     (SP)+,R4        ; RESTORE R4
         MOV     (SP)+,R3        ; RESTORE R3
@@ -397,9 +414,58 @@ ICMUL:  MOV     R2,-(SP)        ; SAVE R2
         ADD     #10,SP          ; CLEAN UP STACK
         INC     (R2)            ; INCREMENT PC
 
+        CLR     R0              ; INDICATE SUCCESS
+        MOV     (SP)+,R5        ; RESTORE R5
         MOV     (SP)+,R5        ; RESTORE R5
         MOV     (SP)+,R4        ; RESTORE R4
         MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; ICINP(COMPUTER, MODES)
+;
+; EXECUTE INTCODE INPUT INSTRUCTION
+;
+ICINP:  MOV     R2,-(SP)        ; SAVE R2
+        MOV     4(SP),R2        ; R2 <- COMPUTER
+        BIT     #1,2(R2)        ; CHECK BIT 0 OF STATUS
+        BNE     ICINP0          ; IF INPUT AVAILABLE, SKIP AHEAD
+        MOV     #1,R0           ; INDICATE IN ON EMPTY BUFFER
+        DEC     (R2)            ; DECREMENT PC SO WE CAN TRY AGAIN
+        BR      ICINP9          ; WE'RE DONE
+ICINP0: MOV     4(R2),-(SP)     ; HI <- INPUT HI
+        MOV     6(R2),-(SP)     ; LO <- INPUT LO
+        MOV     (R2),-(SP)      ; POSITION <- PC
+        MOV     R2,-(SP)        ; COMPUTER <- COMPUTER
+        JSR     PC,ICPUTP       ; ICPUTP(COMPUTER, POSITION, LO, HI)
+        ADD     #10,SP          ; CLEAN UP STACK
+        BIC     #1,2(R2)        ; CLEAR INPUT AVAILABLE STATUS
+        INC     (R2)            ; INCREMENT PC
+        CLR     R0              ; INDICATE SUCCESS
+ICINP9: MOV     (SP)+,R2        ; RESTORE R2
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; ICOUTP(COMPUTER, MODES)
+;
+; EXECUTE INCODE OUTPUT INSTRUCTION
+; OVERWRITES ANY EXISTING OUTPUT
+;
+ICOUTP: MOV     R2,-(SP)        ; SAVE R2
+        MOV     4(SP),R2        ; R2 <- COMPUTER
+
+        MOV     (R2),-(SP)      ; POSITION <- PC
+        MOV     R2,-(SP)        ; COMPUTER <- COMPUTER
+        JSR     PC,ICGETP       ; ICGETP(COMPUTER, POSITION)
+        ADD     #4,SP           ; CLEAN UP STACK
+
+        MOV     R0,10(R2)       ; OUTPUT HI <- HI
+        MOV     R1,12(R2)       ; OUTPUT LO <- LO
+        BIS     #2,2(R2)        ; SET OUTPUT AVAIALBLE STATUS
+        INC     (R2)            ; INCREMENT PC
+        CLR     R0              ; INDICATE SUCCESS
+
         MOV     (SP)+,R2        ; RESTORE R2
         RTS     PC              ; RETURN TO CALLER
 
@@ -407,6 +473,8 @@ ICMUL:  MOV     R2,-(SP)        ; SAVE R2
 ICOP:   .WORD   0
         .WORD   ICADD
         .WORD   ICMUL
+        .WORD   ICINP
+        .WORD   ICOUTP
 ;
 ; STATIC DATA
 ;
