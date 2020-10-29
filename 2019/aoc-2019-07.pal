@@ -22,7 +22,7 @@
         PC=     %7              ; PROGRAM COUNTER
 
 
-        ICSIZE=4000             ; SIZE OF INTCODE MEMORY
+        ICSIZE=1400             ; SIZE OF INTCODE MEMORY
 
 ;
 ; START OF PROGRAM
@@ -39,7 +39,10 @@ START:  MOV     #.,SP           ; SET UP STACK
 
         ; PARSE INTCODE PROGRAM
 
-        MOV     #ICSIZE,-(SP)   ; SIZE <- ICSIZE
+        MOV     #ICSIZE,R0      ; R0 <- MAX INTEGERS
+        ASL     R0              ; R0 <- SIZE IN WORDS
+        ASL     R0              ; R0 <- SIZE IN BYTES
+        MOV     R0,-(SP)        ; SIZE <- SIZE IN BYTES
         JSR     PC,MALLOC       ; MALLOC(SIZE)
         TST     (SP)+           ; CLEAN UP STACK
         MOV     R0,R2           ; R2 <- DEST
@@ -52,7 +55,7 @@ START:  MOV     #.,SP           ; SET UP STACK
 
         ; ALLOCATE AND INITIALIZE INTCODE COMPUTER
 
-        MOV     ICSIZE,-(SP)    ; SIZE <- ICSIZE
+        MOV     R3,-(SP)        ; SIZE <- INTEGERS PARSED
         JSR     PC,ICINIT       ; ICINIT(SIZE)
         TST     (SP)+           ; CLEAN UP STACK
         MOV     R0,R4           ; R4 <- COMPUTER
@@ -66,7 +69,18 @@ START:  MOV     #.,SP           ; SET UP STACK
         ; MAIN LOOP
 
         MOV     R4,-(SP)        ; COMPUTER <- R4
-START0: JSR     PC,ICSTEP       ; ICSTEP(COMPUTER)
+START0:
+; DEBUG: PRINT PC BEFORE EXECUTING OP
+;       MOV #STDOUT,-(SP)
+;       MOV (R4),-(SP)
+;       CLR -(SP)
+;       JSR PC,FMTDU
+;       ADD #4,SP
+;       MOV #CRLF,-(SP)
+;       JSR PC,FPUTS
+;       ADD #4,SP
+
+        JSR     PC,ICSTEP       ; ICSTEP(COMPUTER)
         CMP     #143,R0         ; CHECK FOR HALT
         BEQ     START9          ; WE'RE DONE
         CMP     #1,R0           ; CHECK FOR INPUT NEEDED
@@ -90,7 +104,10 @@ START1: BIT     #2,2(R4)        ; CHECK OUTPUT STATUS BIT
         MOV     R1,-(SP)        ; VALUE LO <- OUT LO
         MOV     R0,-(SP)        ; VALUE HI <- OUT HI
         JSR     PC,FMTDU        ; FMTDU(HI, LO, STREAM)
-        ADD     #6,SP           ; CLEAN UP STACK
+        ADD     #4,SP           ; CLEAN UP STACK
+        MOV     #CRLF,-(SP)     ; S <- CRLF
+        JSR     PC,FPUTS        ; FPUTS(S, STREAM)
+        ADD     #4,SP           ; CLEAN UP STACK
 START2: BR      START0          ; NEXT STEP
 START9: TST     (SP)+           ; CLEAN UP STACK
 
@@ -109,12 +126,30 @@ START9: TST     (SP)+           ; CLEAN UP STACK
 ; GIVEN LOCATION.
 ; RETURN NUMBER OF INTEGERS READ
 ;
-PARSE:  MOV     R2,-(SP)        ; SAVE R1
-        MOV     6(SP),R2        ; R2 <- DEST
+PARSE:  MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     10(SP),R2       ; R2 <- DEST
 
-        MOV     4(SP),-(SP)     ; STREAM <- STREAM
-PARSE0: JSR     PC,PRSWU        ; PRSWU(STREAM)
-        MOV     R0,(R2)+        ; WRITE HI
+        MOV     6(SP),-(SP)     ; STREAM <- STREAM
+PARSE0: CLR     R3              ; CLEAR FLAGS
+        JSR     PC,FGETC        ; FGETC(STREAM)
+        CMP     #'-,R0          ; IS IT A HYPHEN
+        BNE     PARSE1          ; IF NOT, SKIP AHEAD
+        BIS     #100000,R3      ; SET NEGATIVE FLAG
+        BR      PARSE2          ; SKIP AHEAD
+PARSE1: MOV     R0,-(SP)        ; C <- R0
+        JSR     PC,UNGETC       ; PUT DIGIT BACK ON THE STREAM
+        TST     (SP)+           ; CLEAN UP STACK
+
+PARSE2: JSR     PC,PRSWU        ; PRSWU(STREAM)
+        TST     R3              ; CHECK FLAGS
+        BPL     PARSE3          ; IF NOT NEGATIVE, SKIP AHEAD
+        COM     R1              ; COMPLIMENT LO
+        COM     R0              ; COMPLIMENT HI
+        ADD     #1,R1           ; INCREMENT LO TO GET TWO'S COMPLIMENT
+        ADC     R0              ; ADD CARRY
+
+PARSE3: MOV     R0,(R2)+        ; WRITE HI
         MOV     R1,(R2)+        ; WRITE LO
 
         JSR     PC,FGETC        ; FGETC(STREAM)
@@ -123,10 +158,11 @@ PARSE0: JSR     PC,PRSWU        ; PRSWU(STREAM)
         TST     (SP)+           ; CLEAN UP STACK
 
         MOV     R2,R0           ; R2 <- LAST WORD IN DEST
-        SUB     6(SP),R0        ; R0 <- NUMBER OF WORDS IN DEST
+        SUB     10(SP),R0       ; R0 <- NUMBER OF WORDS IN DEST
         ASR     R0              ;
         ASR     R0              ; DIVIDE BY FOUR TO GET INTEGERS READ
 
+        MOV     (SP)+,R3        ; RESTORE R3
         MOV     (SP)+,R2        ; RESTORE R2
         RTS     PC              ; RETURN TO CALLER
 
@@ -150,6 +186,7 @@ PARSE0: JSR     PC,PRSWU        ; PRSWU(STREAM)
 ;
 ICINIT: MOV     R1,-(SP)        ; SAVE R1
         MOV     4(SP),R0        ; R0 <- SIZE
+        ASL     R0              ; R0 <- SPACE NEEDED FOR IC WORD MEMORY
         ASL     R0              ; R0 <- SPACE NEEDED FOR IC WORD MEMORY
         ADD     #14,R0          ; R0 <- SPACE NEEDED FOR IC
         MOV     R0,R1           ; R1 <- SPACE NEEDED FOR IC
@@ -420,7 +457,6 @@ ICMUL:  MOV     R2,-(SP)        ; SAVE R2
 
         CLR     R0              ; INDICATE SUCCESS
         MOV     (SP)+,R5        ; RESTORE R5
-        MOV     (SP)+,R5        ; RESTORE R5
         MOV     (SP)+,R4        ; RESTORE R4
         MOV     (SP)+,R3        ; RESTORE R3
         MOV     (SP)+,R2        ; RESTORE R2
@@ -457,19 +493,21 @@ ICINP9: MOV     (SP)+,R2        ; RESTORE R2
 ; OVERWRITES ANY EXISTING OUTPUT
 ;
 ICOUTP: MOV     R2,-(SP)        ; SAVE R2
-        MOV     4(SP),R2        ; R2 <- COMPUTER
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     6(SP),R2        ; R2 <- COMPUTER
+        MOV     10(SP),R3       ; R3 <- MODES
 
-        MOV     (R2),-(SP)      ; POSITION <- PC
-        MOV     R2,-(SP)        ; COMPUTER <- COMPUTER
-        JSR     PC,ICGETP       ; ICGETP(COMPUTER, POSITION)
+        MOV     R3,-(SP)        ; MODES
+        MOV     R2,-(SP)        ; COMPUTER
+        JSR     PC,ICPARM       ; ICPARM(COMPUTER, MODES)
         ADD     #4,SP           ; CLEAN UP STACK
 
         MOV     R0,10(R2)       ; OUTPUT HI <- HI
         MOV     R1,12(R2)       ; OUTPUT LO <- LO
         BIS     #2,2(R2)        ; SET OUTPUT AVAIALBLE STATUS
-        INC     (R2)            ; INCREMENT PC
         CLR     R0              ; INDICATE SUCCESS
 
+        MOV     (SP)+,R3        ; RESTORE R3
         MOV     (SP)+,R2        ; RESTORE R2
         RTS     PC              ; RETURN TO CALLER
 
