@@ -489,7 +489,7 @@ ICINP9: MOV     (SP)+,R2        ; RESTORE R2
 ;
 ; ICOUTP(COMPUTER, MODES)
 ;
-; EXECUTE INCODE OUTPUT INSTRUCTION
+; EXECUTE INTCODE OUTPUT INSTRUCTION
 ; OVERWRITES ANY EXISTING OUTPUT
 ;
 ICOUTP: MOV     R2,-(SP)        ; SAVE R2
@@ -510,6 +510,157 @@ ICOUTP: MOV     R2,-(SP)        ; SAVE R2
         MOV     (SP)+,R3        ; RESTORE R3
         MOV     (SP)+,R2        ; RESTORE R2
         RTS     PC              ; RETURN TO CALLER
+;
+; ICJIT(COMPUTER, MODES)
+;
+; EXECUTE INTCODE JUMP-IF-TRUE INSTRUCTION
+;
+ICJIT:
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+
+        MOV     6(SP),R2        ; R2 <- COMPUTER
+        MOV     10(SP),R3       ; R3 <- MODES
+
+        MOV     R3,-(SP)        ; MODES
+        MOV     R2,-(SP)        ; COMPUTER
+        JSR     PC,ICPARM       ; ICPARM(COMPUTER, MODES)
+        TST     R1              ; CHECK R1
+        BNE     ICJIT1          ; NOT ZERO
+        TST     R0              ; CHECK R0
+        BEQ     ICJIT2          ; IF ZERO, SKIP AHEAD
+ICJIT1: JSR     PC,ICPARM       ; ICPARM(COMPUTER, MODES)
+        MOV     R1,(R2)         ; SET PC TO VALUE
+        BR      ICJIT3          ; SKIP AHEAD
+ICJIT2: INC     (R2)            ; INCREMENT PC
+ICJIT3: ADD     #4,SP           ; CLEAN UP STACK
+
+        CLR     R0              ; INDICATE SUCCESS
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; ICJIF(COMPUTER, MODES)
+;
+; EXECUTE INTCODE JUMP-IF-FALSE INSTRUCTION
+;
+ICJIF:
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+
+        MOV     6(SP),R2        ; R2 <- COMPUTER
+        MOV     10(SP),R3       ; R3 <- MODES
+
+        MOV     R3,-(SP)        ; MODES
+        MOV     R2,-(SP)        ; COMPUTER
+        JSR     PC,ICPARM       ; ICPARM(COMPUTER, MODES)
+        TST     R1              ; CHECK R1
+        BNE     ICJIF1          ; NOT ZERO
+        TST     R0              ; CHECK R0
+        BNE     ICJIF1          ; NOT ZERO
+        JSR     PC,ICPARM       ; ICPARM(COMPUTER, MODES)
+        MOV     R1,(R2)         ; SET PC TO VALUE
+        BR      ICJIF2          ; SKIP AHEAD
+ICJIF1: INC     (R2)            ; INCREMENT PC
+ICJIF2: ADD     #4,SP           ; CLEAN UP STACK
+
+        CLR     R0              ; INDICATE SUCCESS
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; ICLT(COMPUTER, MODES)
+;
+; EXECUTE INTCODE LESS-THAN INSTRUCTION
+;
+ICLT:
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     R4,-(SP)        ; SAVE R4
+        MOV     R5,-(SP)        ; SAVE R5
+
+        MOV     12(SP),R2       ; R2 <- COMPUTER
+        MOV     14(SP),R3       ; R3 <- MODES
+
+        MOV     R3,-(SP)        ; MODES
+        MOV     R2,-(SP)        ; COMPUTER
+        JSR     PC,ICPARM       ; ICPARM(COMPUTER, MODES)
+        MOV     R0,R4           ; HI
+        MOV     R1,R5           ; LO
+        JSR     PC,ICPARM       ; ICPARM(COMPUTER, MODES)
+        ADD     #4,SP           ; CLEAN UP STACK
+        CLR     -(SP)           ; HI <- 0
+        CMP     R4,R0           ; COMPARE FIRST HI AND SECOND HI
+        BLT     ICLT1           ; IF SO, SET 1
+        CMP     R5,R1           ; COMPARE FIRST LO AND SECOND LO
+        BLT     ICLT1           ; IF SO, SET 1
+
+        CLR     -(SP)           ; LO <- 0
+
+        BR      ICLT2           ; SKIP AHEAD
+ICLT1:  MOV     #1,-(SP)        ; LO <- 1
+
+
+ICLT2:  MOV     (R2),-(SP)      ; POSITION <- PC
+        MOV     R2,-(SP)        ; COMPUTER
+        JSR     PC,ICPUTP       ; ICPUTP(COMPUTER, POSITION, LO, HI)
+        ADD     #10,SP          ; CLEAN UP STACK
+        INC     (R2)            ; INCREMENT PC
+
+                                ; R0 IS ALREADY 0: SUCCESS
+        MOV     (SP)+,R5        ; RESTORE R5
+        MOV     (SP)+,R4        ; RESTORE R4
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        RTS     PC              ; RETURN TO CALLER
+
+;
+; ICEQ(COMPUTER, MODES)
+;
+; EXECUTE INTCODE EQUALS INSTRUCTION
+;
+ICEQ:
+        MOV     R2,-(SP)        ; SAVE R2
+        MOV     R3,-(SP)        ; SAVE R3
+        MOV     R4,-(SP)        ; SAVE R4
+        MOV     R5,-(SP)        ; SAVE R5
+
+        MOV     12(SP),R2       ; R2 <- COMPUTER
+        MOV     14(SP),R3       ; R3 <- MODES
+
+        MOV     R3,-(SP)        ; MODES
+        MOV     R2,-(SP)        ; COMPUTER
+        JSR     PC,ICPARM       ; ICPARM(COMPUTER, MODES)
+        MOV     R0,R4           ; HI
+        MOV     R1,R5           ; LO
+        JSR     PC,ICPARM       ; ICPARM(COMPUTER, MODES)
+        ADD     #4,SP           ; CLEAN UP STACK
+        CLR     -(SP)           ; HI <- 0
+        CMP     R4,R0           ; COMPARE FIRST HI AND SECOND HI
+        BNE     ICEQ1           ; IF SO, SET 1
+        CMP     R5,R1           ; COMPARE FIRST LO AND SECOND LO
+        BNE     ICEQ1           ; IF SO, SET 1
+
+        MOV     #1,-(SP)        ; LO <- 1
+
+        BR      ICEQ2           ; SKIP AHEAD
+ICEQ1:  CLR     -(SP)           ; LO <- 0
+
+
+ICEQ2:  MOV     (R2),-(SP)      ; POSITION <- PC
+        MOV     R2,-(SP)        ; COMPUTER
+        JSR     PC,ICPUTP       ; ICPUTP(COMPUTER, POSITION, LO, HI)
+        ADD     #10,SP          ; CLEAN UP STACK
+        INC     (R2)            ; INCREMENT PC
+
+                                ; R0 IS ALREADY 0: SUCCESS
+        MOV     (SP)+,R5        ; RESTORE R5
+        MOV     (SP)+,R4        ; RESTORE R4
+        MOV     (SP)+,R3        ; RESTORE R3
+        MOV     (SP)+,R2        ; RESTORE R2
+        RTS     PC              ; RETURN TO CALLER
 
 ; INTCODE OPERATION TABLE
 ICOP:   .WORD   0
@@ -517,6 +668,10 @@ ICOP:   .WORD   0
         .WORD   ICMUL
         .WORD   ICINP
         .WORD   ICOUTP
+        .WORD   ICJIT
+        .WORD   ICJIF
+        .WORD   ICLT
+        .WORD   ICEQ
 ;
 ; STATIC DATA
 ;
